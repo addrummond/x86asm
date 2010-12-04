@@ -27,18 +27,18 @@ void test1()
     // MOV RDX, 2
     a.mov_reg_imm64(RDX, 2);
     // IMUL RAX, RDX // {RAX now contains 4}
-    a.imul_reg_rm(reg_ModrmSib(RAX, RDX));
-    a.imul_reg_rm(reg_ModrmSib(RAX, RDX));
+    a.imul_reg_rm64(reg_ModrmSib(RAX, RDX));
+    a.imul_reg_rm64(reg_ModrmSib(RAX, RDX));
     // MOV RDX, RAX
     a.mov_reg_reg(RDX, RAX);
     // INC RDX
-    a.inc_reg(RDX);
+    a.inc_reg64(RDX);
     // MOV RAX, RDX {could have used mov_reg_reg here instead}
-    a.mov_rm_reg(reg_ModrmSib(RDX, RAX));
+    a.mov_rm64_reg(reg_ModrmSib(RDX, RAX));
     // MOV RBX, [imm64 -- address of 'foo']
     a.mov_reg_imm64(RBX, ptr(&foo));
     // MOV [RBX], RDX
-    a.mov_rm_reg(mem_ModrmSib2op(RDX, RBX));
+    a.mov_rm64_reg(mem_ModrmSib2op(RDX, RBX));
     // MOV RAX, [imm64 -- address of 'bar']
     a.mov_moffs64_rax(ptr(&bar));
     // MOV RBX, [imm64 -- address of (first element of) 'foobar']
@@ -46,17 +46,17 @@ void test1()
     // MOV RCX, 1
     a.mov_reg_imm64(RCX, 1);
     // MOV [RBX+(RCX*8)+8], RDX // {Unnecessarily complex method of accessing second element of foobar}
-    a.mov_rm_reg(mem_ModrmSib2op(RDX, RBX, RCX, SCALE_8, 8));
+    a.mov_rm64_reg(mem_ModrmSib2op(RDX, RBX, RCX, SCALE_8, 8));
     // ADD [RBX+(RCX*8)+8], 340
     a.add_rm64_imm32(mem_ModrmSib1op(RBX, RCX, SCALE_8, 8), 340);
     // INC RCX
-    a.inc_reg(RCX);
+    a.inc_reg64(RCX);
     // ADD [RBX+(RCX*8)], 5 // {Now that RCX has been incremented, we no longer need to add a displacement}
     a.add_rm32_imm32(mem_ModrmSib1op(RBX, RCX, SCALE_8, 0), 5);
     // SUB [RBX+(RCX*8)], 5
     a.sub_rm64_imm32(mem_ModrmSib1op(RBX, RCX, SCALE_8, 0), 5);
     // DEC RCX
-    a.dec_reg(RCX);
+    a.dec_reg64(RCX);
     // SUB [RBX+(RCX*8)], 5
     a.sub_rm64_imm32(mem_ModrmSib1op(RBX, RCX, SCALE_8, 0), 5);
     // RET
@@ -119,8 +119,8 @@ void test3()
     // Code in loop.
     std::size_t s1 = w.size();
     a.mov_reg_imm64(RCX, 2);
-    a.imul_reg_rm(reg_ModrmSib(RDX, RCX));
-    a.inc_reg(RAX);
+    a.imul_reg_rm64(reg_ModrmSib(RDX, RCX));
+    a.inc_reg64(RAX);
     a.cmp_rax_imm32(5);
     std::size_t s2 = w.size();
     // Using an explicitly constructed Disp<int8_t> to ensure that the size of the JL
@@ -130,7 +130,7 @@ void test3()
     // Move the value of RDX into val (not quite the simplest way, but good to
     // give MOV a bit of a workout).
     a.mov_reg_imm64(RAX, ptr(&val));
-    a.mov_rm_reg(mem_ModrmSib2op(RDX, RAX));
+    a.mov_rm64_reg(mem_ModrmSib2op(RDX, RAX));
 
     a.ret();
 

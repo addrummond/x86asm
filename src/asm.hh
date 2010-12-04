@@ -76,6 +76,8 @@ struct ModrmSib {
     Register simple_register() const;
     // Return true if all register operands are GP.
     bool gp3264_registers_only() const;
+    // Checks that all register operands in a ModRM byte have a given (byte) size.
+    bool all_register_operands_have_size(Size size) const;
 
     Register rm_reg;
     Register reg;
@@ -142,14 +144,22 @@ public:
     Assembler(WriterT &writer) : w(writer) { }
 
     // ADC
-    void adc_rm_reg(ModrmSib const &modrmsib);
-    void adc_reg_rm(ModrmSib const &modrmsib);
+    void adc_rm8_reg(ModrmSib const &modrmsib);
+    void adc_rm32_reg(ModrmSib const &modrmsib);
+    void adc_rm64_reg(ModrmSib const &modrmsib);
+    void adc_reg_rm8(ModrmSib const &modrmsib);
+    void adc_reg_rm32(ModrmSib const &modrmsib);
+    void adc_reg_rm64(ModrmSib const &modrmsib);
     void adc_rm32_imm32(ModrmSib const &modrmsib, uint32_t src);
     void adc_rm64_imm32(ModrmSib const &modrmsib, uint32_t src);
 
     // ADD
-    void add_rm_reg(ModrmSib const &modrmsib);
-    void add_reg_rm(ModrmSib const &modrmsib);
+    void add_rm8_reg(ModrmSib const &modrmsib);
+    void add_rm32_reg(ModrmSib const &modrmsib);
+    void add_rm64_reg(ModrmSib const &modrmsib);
+    void add_reg_rm8(ModrmSib const &modrmsib);
+    void add_reg_rm32(ModrmSib const &modrmsib);
+    void add_reg_rm64(ModrmSib const &modrmsib);
     void add_rm32_imm32(ModrmSib const &modrmsib, uint32_t src);
     void add_rm64_imm32(ModrmSib const &modrmsib, uint32_t src);
 
@@ -164,17 +174,34 @@ public:
     void cmp_rax_imm32(uint32_t imm); // This is also a special case of cmp_rm64_imm32.
 
     // DEC
-    void dec_rm(ModrmSib const &modrmsib);
-    void dec_reg(Register reg) { dec_rm(reg_ModrmSib(reg)); }
+    void dec_rm8(ModrmSib const &modrmsib);
+    void dec_rm32(ModrmSib const &modrmsib);
+    void dec_rm64(ModrmSib const &modrmsib);
+    // Utils:
+    void dec_reg8(Register reg) { dec_rm8(reg_ModrmSib(reg)); }
+    void dec_reg32(Register reg) { dec_rm32(reg_ModrmSib(reg)); }
+    void dec_reg64(Register reg) { dec_rm64(reg_ModrmSib(reg)); }
+
+    // IDIV
+    void idiv_ax_al_rm8(ModrmSib const &modrmsib);
+    void idiv_edx_eax_rm32(ModrmSib const &modrmsib);
+    void idiv_rdx_rax_rm64(ModrmSib const &modrmsib);
 
     // IMUL
-    void imul_reg_rm(ModrmSib const &modrmsib);
-    void imul_edx_eax_rm(ModrmSib const &modrmsib);
-    void imul_rdx_rax_rm(ModrmSib const &modrmsib);
+    void imul_reg_rm32(ModrmSib const &modrmsib);
+    void imul_reg_rm64(ModrmSib const &modrmsib);
+    void imul_ax_al_rm8(ModrmSib const &modrmsib);
+    void imul_edx_eax_rm32(ModrmSib const &modrmsib);
+    void imul_rdx_rax_rm64(ModrmSib const &modrmsib);
 
     // INC
-    void inc_rm(ModrmSib const &modrmsib);
-    void inc_reg(Register reg) { inc_rm(reg_ModrmSib(reg)); }
+    void inc_rm8(ModrmSib const &modrmsib);
+    void inc_rm32(ModrmSib const &modrmsib);
+    void inc_rm64(ModrmSib const &modrmsib);
+    // Utils:
+    void inc_reg8(Register reg) { inc_rm8(reg_ModrmSib(reg)); }
+    void inc_reg32(Register reg) { inc_rm32(reg_ModrmSib(reg)); }
+    void inc_reg64(Register reg) { inc_rm64(reg_ModrmSib(reg)); }
 
     // Jcc
     // See http://unixwiz.net/techtips/x86-jumps.html (synonyms excluded).
@@ -242,18 +269,27 @@ public:
                                                    // and because the modrm byte can be
                                                    // computed using simpler code in this
                                                    // case.
-    void mov_rm_reg(ModrmSib const &modrmsib);
-    void mov_reg_rm(ModrmSib const &modrmsib);
+    void mov_rm8_reg(ModrmSib const &modrmsib);
+    void mov_rm32_reg(ModrmSib const &modrmsib);
+    void mov_rm64_reg(ModrmSib const &modrmsib);
+    void mov_reg_rm8(ModrmSib const &modrmsib);
+    void mov_reg_rm32(ModrmSib const &modrmsib);
+    void mov_reg_rm64(ModrmSib const &modrmsib);
     void mov_reg_imm64(Register reg, uint64_t imm);
     void mov_moffs64_rax(uint64_t addr);
 
     // MUL
-    void mul_edx_eax_rm(ModrmSib const &modrmsib);
-    void mul_rdx_rax_rm(ModrmSib const &modrmsib);
+    void mul_ax_al_rm8(ModrmSib const &modrmsib);
+    void mul_edx_eax_rm32(ModrmSib const &modrmsib);
+    void mul_rdx_rax_rm64(ModrmSib const &modrmsib);
 
     // SUB
-    void sub_rm_reg(ModrmSib const &modrmsib);
-    void sub_reg_rm(ModrmSib const &modrmsib);
+    void sub_rm8_reg(ModrmSib const &modrmsib);
+    void sub_rm32_reg(ModrmSib const &modrmsib);
+    void sub_rm64_reg(ModrmSib const &modrmsib);
+    void sub_reg_rm8(ModrmSib const &modrmsib);
+    void sub_reg_rm32(ModrmSib const &modrmsib);
+    void sub_reg_rm64(ModrmSib const &modrmsib);
     void sub_rm32_imm32(ModrmSib const &modrmsib, uint32_t src);
     void sub_rm64_imm32(ModrmSib const &modrmsib, uint32_t src);
 
