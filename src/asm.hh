@@ -1,0 +1,303 @@
+#ifndef ASM_HH
+#define ASM_HH
+
+#include <stdint.h>
+#include <cstddef>
+#include <vector>
+#include <map>
+#include <string>
+
+namespace Asm {
+
+enum Register {
+    EAX=0, ECX, EDX, EBX, ESP, EBP, ESI, EDI,
+    RAX, RCX, RDX, RBX, RSP, RBP, RSI, RDI,
+    R8D, R9D, R10D, R11D, R12D, R13D, R14D, R15D,
+    MM0, MM1, MM2, MM3, MM4, MM5, MM6, MM7,
+    XMM0, XMM1, XMM2, XMM3, XMM4, XMM5, XMM6, XMM7,
+
+    FS,GS, // Other segment registers are ignored in 64-bit mode.
+
+    NOT_A_REGISTER
+};
+
+char const *register_name(Register reg);
+
+enum Size {
+    SIZE_8=1,
+    SIZE_16=2,
+    SIZE_32=4,
+    SIZE_64=8
+};
+
+enum DispSize {
+    DISP_SIZE_NONE=0,
+    DISP_SIZE_8=1,
+    DISP_SIZE_32=4
+};
+
+// For SIB.
+enum Scale {
+    SCALE_1=1,
+    SCALE_2=2,
+    SCALE_4=4,
+    SCALE_8=8
+};
+
+struct ModrmSib {
+    ModrmSib(Register rm_reg_=NOT_A_REGISTER, DispSize disp_size_=DISP_SIZE_NONE,
+             int32_t disp_=0, Register reg_=NOT_A_REGISTER, Register base_reg_=NOT_A_REGISTER, Scale scale_=SCALE_1)
+        : rm_reg(rm_reg_), disp_size(disp_size_), disp(disp_), reg(reg_), base_reg(base_reg_), scale(scale_) { }
+
+    // This is horrible, but I suspect there's no significantly-less-horrible alternative scheme.
+    //
+    // WITH NO SIB:
+    //     rm_reg    <- R/M (rows on p. 2-7 of IA32 SDM 2A).
+    //     reg       <- Additional reg operand (cols on p. 2-7) or NOT_A_REGISTER if no additional reg operand.
+    //     base_reg  <- NOT_A_REGISTER.
+    //     disp_size <- DISP_SIZE_NONE if Mod=11; otherwise DISP_SIZE_8 or DISP_SIZE_32.
+    //                  (not that for Mod=00, disp_size should be set to 8 or 32, and disp should be set to 0).
+    //     disp      <- Displacement.
+    //     scale     <- SCALE_1.
+    //
+    // WITH A SIB:
+    //     rm_reg    <- Index.
+    //     reg       <- Additional reg operand (as when no SIB is present; see above).
+    //     base_reg  <- Base.
+    //     disp_size <- (As when no SIB is present; see above).
+    //     disp      <- Displacement.
+    //     scale     <- SCALE_2 or SCALE_3 or SCALE_4.
+    //
+    // To create one of these structures without going mad, use 'mem_ModrmSib1/2' or 'reg_ModrmSib',
+    // defined below.
+
+    // Returns a register if there is no SIB, no second operand, and r/m is a register.
+    // Otherwise returns NOT_A_REGISTER.
+    Register simple_register() const;
+    // Return true if all register operands are GP.
+    bool gp3264_registers_only() const;
+
+    Register rm_reg;
+    Register reg;
+    Register base_reg;
+    DispSize disp_size;
+    int32_t disp;
+    Scale scale;
+};
+// For two-operands.
+ModrmSib mem_ModrmSib2op(Register reg, Register base=NOT_A_REGISTER, Register index=NOT_A_REGISTER, Scale scale=SCALE_1, int32_t displacement=0, bool short_displacement=false);
+// For one operand.
+ModrmSib mem_ModrmSib1op(Register base=NOT_A_REGISTER, Register index=NOT_A_REGISTER, Scale scale=SCALE_1, int32_t displacement=0, bool short_displacement=false);
+ModrmSib reg_ModrmSib(Register reg, Register rm);
+ModrmSib reg_ModrmSib(Register rm);
+
+enum Rex {
+    REX_PREFIX = 0x40,
+    REX_W      = 0x08,
+    REX_R      = 0x04,
+    REX_X      = 0x02,
+    REX_B      = 0x01
+};
+
+enum BranchHint {
+    BRANCH_HINT_NONE,
+    BRANCH_HINT_TAKEN,
+    BRANCH_HINT_NOT_TAKEN
+};
+
+unsigned const NUMBER_OF_REGISTERS = 40;
+uint8_t register_code(Register reg);
+uint8_t register_rex(Register reg);
+unsigned register_byte_size(Register reg);
+
+// This class is used to allow displacements to be expressed as a simple
+// function of the size of certain instructions. E.g., when writing a jump
+// instruction with a negative displacement, one needs to know the size of
+// the jump instruction itself.
+enum DispOp {
+    DISP_NO_OP,
+    DISP_ADD_ISIZE,
+    DISP_SUB_ISIZE
+};
+template <class IntT>
+class Disp {
+public:
+    typedef IntT IntType;
+
+    Disp(IntT i_) : i(i_), op(DISP_NO_OP) { }
+    Disp(IntT i_, DispOp op_) : i(i_), op(op_) { }
+
+    IntT get(std::size_t isize) { return (op == DISP_NO_OP ? i : (op == DISP_ADD_ISIZE ? i + isize : i - isize)); }
+
+private:
+    IntT i;
+    DispOp op;
+};
+template <class IntT>
+Disp<IntT> mkdisp(IntT i, DispOp op = DISP_NO_OP);
+
+template <class WriterT>
+class Assembler {
+public:
+    Assembler(WriterT &writer) : w(writer) { }
+
+    // ADC
+    void adc_rm_reg(ModrmSib const &modrmsib);
+    void adc_reg_rm(ModrmSib const &modrmsib);
+    void adc_rm32_imm32(ModrmSib const &modrmsib, uint32_t src);
+    void adc_rm64_imm32(ModrmSib const &modrmsib, uint32_t src);
+
+    // ADD
+    void add_rm_reg(ModrmSib const &modrmsib);
+    void add_reg_rm(ModrmSib const &modrmsib);
+    void add_rm32_imm32(ModrmSib const &modrmsib, uint32_t src);
+    void add_rm64_imm32(ModrmSib const &modrmsib, uint32_t src);
+
+    // CMP
+    void cmp_rm8_imm8(ModrmSib const &modrmsib, uint8_t imm);
+    void cmp_rm32_imm8(ModrmSib const &modrmsib, uint8_t imm);
+    void cmp_rm64_imm8(ModrmSib const &modrmsib, uint8_t imm);
+    void cmp_rm32_imm32(ModrmSib const &modrmsib, uint32_t imm);
+    void cmp_rm64_imm32(ModrmSib const &modrmsib, uint32_t imm);
+    void cmp_al_imm8(uint8_t imm);
+    void cmp_eax_imm32(uint32_t imm);
+    void cmp_rax_imm32(uint32_t imm); // This is also a special case of cmp_rm64_imm32.
+
+    // DEC
+    void dec_rm(ModrmSib const &modrmsib);
+    void dec_reg(Register reg) { dec_rm(reg_ModrmSib(reg)); }
+
+    // IMUL
+    void imul_reg_rm(ModrmSib const &modrmsib);
+    void imul_edx_eax_rm(ModrmSib const &modrmsib);
+    void imul_rdx_rax_rm(ModrmSib const &modrmsib);
+
+    // INC
+    void inc_rm(ModrmSib const &modrmsib);
+    void inc_reg(Register reg) { inc_rm(reg_ModrmSib(reg)); }
+
+    // Jcc
+    // See http://unixwiz.net/techtips/x86-jumps.html (synonyms excluded).
+    //
+    // JE,JZ             JZ
+    // JNE,JNZ           JNZ
+    // JB,JNAE,JC        JC
+    // JNB,JAE,JNC       JNC
+    // JBE,JNA           JBE
+    // JA,JNBE           JA
+    // JL,JNGE           JL
+    // JGE,JNL           JGE
+    // JLE,JNG           JLE
+    // JG,JNLE           JG
+    // JP,JPE            JPE
+    // JNP,JPO           JPO
+    // JCXZ,JECXZ,JRCXZ  JRCXZ
+    void ja_st_rel8(Disp<int8_t> disp, BranchHint hint=BRANCH_HINT_NONE);
+    void jc_st_rel8(Disp<int8_t> disp, BranchHint hint=BRANCH_HINT_NONE);
+    void jg_st_rel8(Disp<int8_t> disp, BranchHint hint=BRANCH_HINT_NONE);
+    void jge_st_rel8(Disp<int8_t> disp, BranchHint hint=BRANCH_HINT_NONE);
+    void jl_st_rel8(Disp<int8_t> disp, BranchHint hint=BRANCH_HINT_NONE);
+    void jle_st_rel8(Disp<int8_t> disp, BranchHint hint=BRANCH_HINT_NONE);
+    void jbe_st_rel8(Disp<int8_t> disp, BranchHint hint=BRANCH_HINT_NONE);
+    void jnc_st_rel8(Disp<int8_t> disp, BranchHint hint=BRANCH_HINT_NONE);
+    void jno_st_rel8(Disp<int8_t> disp, BranchHint hint=BRANCH_HINT_NONE);
+    void jns_st_rel8(Disp<int8_t> disp, BranchHint hint=BRANCH_HINT_NONE);
+    void jnz_st_rel8(Disp<int8_t> disp, BranchHint hint=BRANCH_HINT_NONE);
+    void jo_st_rel8(Disp<int8_t> disp, BranchHint hint=BRANCH_HINT_NONE);
+    void jpe_st_rel8(Disp<int8_t> disp, BranchHint hint=BRANCH_HINT_NONE);
+    void jpo_st_rel8(Disp<int8_t> disp, BranchHint hint=BRANCH_HINT_NONE);
+    void jrcxz_st_rel8(Disp<int8_t> disp, BranchHint hint=BRANCH_HINT_NONE);
+    void js_st_rel8(Disp<int8_t> disp, BranchHint hint=BRANCH_HINT_NONE);
+    void jz_st_rel8(Disp<int8_t> disp, BranchHint hint=BRANCH_HINT_NONE);
+    void ja_nr_rel32(Disp<int32_t> disp, BranchHint hint=BRANCH_HINT_NONE);
+    void jc_nr_rel32(Disp<int32_t> disp, BranchHint hint=BRANCH_HINT_NONE);
+    void jg_nr_rel32(Disp<int32_t> disp, BranchHint hint=BRANCH_HINT_NONE);
+    void jge_nr_rel32(Disp<int32_t> disp, BranchHint hint=BRANCH_HINT_NONE);
+    void jl_nr_rel32(Disp<int32_t> disp, BranchHint hint=BRANCH_HINT_NONE);
+    void jle_nr_rel32(Disp<int32_t> disp, BranchHint hint=BRANCH_HINT_NONE);
+    void jbe_nr_rel32(Disp<int32_t> disp, BranchHint hint=BRANCH_HINT_NONE);
+    void jnc_nr_rel32(Disp<int32_t> disp, BranchHint hint=BRANCH_HINT_NONE);
+    void jno_nr_rel32(Disp<int32_t> disp, BranchHint hint=BRANCH_HINT_NONE);
+    void jns_nr_rel32(Disp<int32_t> disp, BranchHint hint=BRANCH_HINT_NONE);
+    void jnz_nr_rel32(Disp<int32_t> disp, BranchHint hint=BRANCH_HINT_NONE);
+    void jo_nr_rel32(Disp<int32_t> disp, BranchHint hint=BRANCH_HINT_NONE);
+    void jpe_nr_rel32(Disp<int32_t> disp, BranchHint hint=BRANCH_HINT_NONE);
+    void jpo_nr_rel32(Disp<int32_t> disp, BranchHint hint=BRANCH_HINT_NONE);
+    void jrcxz_nr_rel32(Disp<int32_t> disp, BranchHint hint=BRANCH_HINT_NONE);
+    void js_nr_rel32(Disp<int32_t> disp, BranchHint hint=BRANCH_HINT_NONE);
+    void jz_nr_rel32(Disp<int32_t> disp, BranchHint hint=BRANCH_HINT_NONE);
+
+    void ja_st_rel16(Disp<int16_t> disp, BranchHint hint=BRANCH_HINT_NONE);
+    void ja_st_rel32(Disp<int32_t> disp, BranchHint hint=BRANCH_HINT_NONE);
+
+    // JMP
+    void jmp_nr_rel8(int8_t disp);
+    void jmp_nr_rel32(int32_t disp);
+    void jmp_nr_rm(ModrmSib const &modrmsib);
+
+    // MOV
+    void mov_reg_reg(Register dest, Register src); // Provided because ordering of args
+                                                   // can be confusing if mov_rm_reg is
+                                                   // used to move one reg to another,
+                                                   // and because the modrm byte can be
+                                                   // computed using simpler code in this
+                                                   // case.
+    void mov_rm_reg(ModrmSib const &modrmsib);
+    void mov_reg_rm(ModrmSib const &modrmsib);
+    void mov_reg_imm64(Register reg, uint64_t imm);
+    void mov_moffs64_rax(uint64_t addr);
+
+    // MUL
+    void mul_edx_eax_rm(ModrmSib const &modrmsib);
+    void mul_rdx_rax_rm(ModrmSib const &modrmsib);
+
+    // SUB
+    void sub_rm_reg(ModrmSib const &modrmsib);
+    void sub_reg_rm(ModrmSib const &modrmsib);
+    void sub_rm32_imm32(ModrmSib const &modrmsib, uint32_t src);
+    void sub_rm64_imm32(ModrmSib const &modrmsib, uint32_t src);
+
+    // RET
+    void ret();
+
+private:
+    WriterT &w;
+};
+
+class VectorWriter {
+public:
+    static const std::size_t ROOM_AHEAD = 20;
+
+    VectorWriter(std::size_t initial_size = 20);
+    ~VectorWriter();
+
+    void a(const uint8_t *buf, std::size_t length);
+    void a(uint8_t byte);
+    void a(VectorWriter const &vw);
+
+    std::size_t size();
+
+    void canonical_hex(std::string &o);
+    void debug_print();
+
+    typedef void (*voidf)(void);
+    uint8_t *get_mem();
+    voidf get_exec_func();
+
+private:
+    const std::size_t initial_size;
+
+    uint8_t *mem;
+    std::size_t length;
+    std::size_t freebytes;
+};
+
+typedef Assembler<VectorWriter> VectorAssembler;
+
+// Utility for converting pointers to uint64_t.
+template <class T>
+uint64_t ptr(T *p);
+
+}
+
+#endif
