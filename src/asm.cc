@@ -203,13 +203,20 @@ static uint8_t rex_for_ModrmSib(ModrmSib modrmsib)
         return register_rex(modrmsib.base_reg);
 }
 
+// Append byte:
 #define AB(byte) (w.a(static_cast<uint8_t>(byte)))
-#define ABIFNZ(byte) ((byte) ? (w.a(static_cast<uint8_t>(byte)),0) : 0)                                // Append byte if byte is non-zero.
-#define AZ(bytes) (w.a(reinterpret_cast<const uint8_t*>(bytes), sizeof(bytes)-1))                      // Append zero-terminated constant.
-#define A(bytes) (w.a(reinterpret_cast<const uint8_t*>(bytes), sizeof(bytes)))                         // Append non-zero-terminated constant.
-#define AL(bytes, l) (w.a(reinterpret_cast<const uint8_t*>(bytes)), l)                                 // Append with length specified.
-#define A32(addr) do { uint32_t x__ = addr; w.a(reinterpret_cast<const uint8_t*>(&x__), 4); } while (0)  // Append 32-bit value.
-#define A64(addr) do { uint64_t x__ = addr; w.a(reinterpret_cast<const uint8_t*>(&x__), 8); } while (0)  // Append 64-bit value.
+// Append byte if byte is non-zero:
+#define ABIFNZ(byte) ((byte) ? (w.a(static_cast<uint8_t>(byte)),0) : 0)
+// Append zero-terminated constant:
+#define AZ(bytes) (w.a(reinterpret_cast<const uint8_t*>(bytes), sizeof(bytes)-1))
+// Append non-zero-terminated constant:
+#define A(bytes) (w.a(reinterpret_cast<const uint8_t*>(bytes), sizeof(bytes)))
+// Append with length specified:
+#define AL(bytes, l) (w.a(reinterpret_cast<const uint8_t*>(bytes)), l)
+// Append 32-bit value:
+#define A32(addr) do { uint32_t x__ = addr; w.a(reinterpret_cast<const uint8_t*>(&x__), 4); } while (0)
+// Append 64-bit value:
+#define A64(addr) do { uint64_t x__ = addr; w.a(reinterpret_cast<const uint8_t*>(&x__), 8); } while (0)
 
 #define REX_W_S "\x48" // REX_W_S[0] == (REX_PREFIX | REX_W)
 
@@ -257,7 +264,8 @@ static void add_rm_reg_(WriterT &w, ModrmSib const &modrmsib)
 
 #define INST(name, opcode) \
     template <class WriterT> void Asm::Assembler<WriterT>:: \
-    name (ModrmSib const &modrmsib) { add_rm_reg_<WriterT, opcode>(w, modrmsib); }
+    name (ModrmSib const &modrmsib) \
+    { add_rm_reg_<WriterT, opcode>(w, modrmsib); }
 INST(adc_rm_reg, 0x11)
 INST(adc_reg_rm, 0x13)
 INST(add_rm_reg, 0x01)
@@ -293,9 +301,10 @@ static void add_rmXX_imm32_(WriterT &w, ModrmSib modrmsib, uint32_t src)
     A32(src);
 }
 
-#define INST(name, size, simple_opcode, complex_opcode, extension)       \
+#define INST(name, size, simple_opcode, complex_opcode, extension) \
     template <class WriterT> void Asm::Assembler<WriterT>:: \
-    name (ModrmSib const &modrmsib, uint32_t src) { add_rmXX_imm32_<WriterT, size, simple_opcode, complex_opcode, extension>(w, modrmsib, src); }
+    name (ModrmSib const &modrmsib, uint32_t src) \
+    { add_rmXX_imm32_<WriterT, size, simple_opcode, complex_opcode, extension>(w, modrmsib, src); }
 INST(adc_rm32_imm32, SIZE_32, 0x15, 0x81, EDX/*2*/)
 INST(adc_rm64_imm32, SIZE_64, 0x15, 0x81, EDX/*2*/)
 INST(add_rm32_imm32, SIZE_32, 0x05, 0x81, EAX/*0*/)
@@ -325,7 +334,8 @@ static void mul_dxax_rm_(WriterT &w, ModrmSib modrmsib)
 }
 #define INST(name, rexw, extension) \
     template <class WriterT> void Asm::Assembler<WriterT>:: \
-    name (ModrmSib const &modrmsib) { mul_dxax_rm_<WriterT, rexw, extension>(w, modrmsib); }
+    name (ModrmSib const &modrmsib) \
+    { mul_dxax_rm_<WriterT, rexw, extension>(w, modrmsib); }
 INST(imul_rdx_rax_rm, true, ESP/*4*/)
 INST(imul_edx_eax_rm, false, ESP/*4*/)
 INST(mul_rdx_rax_rm, true, EBP/*5*/)
@@ -359,7 +369,8 @@ static void cmp_rmXX_imm_(WriterT &w, Assembler<WriterT> &a, ModrmSib modrmsib, 
 // so we have to have a separate template argument for the "real" size of the immediate argument.
 #define INST(name, size, rexbyte, opcode, extension, immtype, immtypesize)  \
     template <class WriterT> void Asm::Assembler<WriterT>:: \
-    name (ModrmSib const &modrmsib, immtype imm) { cmp_rmXX_imm_<WriterT, size, rexbyte, opcode, extension, immtype, immtypesize>(w, *this, modrmsib, imm);  }
+    name (ModrmSib const &modrmsib, immtype imm) \
+    { cmp_rmXX_imm_<WriterT, size, rexbyte, opcode, extension, immtype, immtypesize>(w, *this, modrmsib, imm);  }
 INST(cmp_rm8_imm8, 1, 0, 0x80, EDI/*7*/, uint8_t, SIZE_8)
 INST(cmp_rm32_imm8, 4, 0, 0x83, EDI/*7*/, uint8_t, SIZE_8)
 INST(cmp_rm64_imm8, 8, REX_PREFIX | REX_W, 0x83, EDI/*7*/, uint8_t, SIZE_8)
@@ -377,7 +388,8 @@ static void cmp_XX_imm32_(WriterT &w, ImmT imm)
 
 #define INST(name, rexbyte, opcode, immtype, immtypesize) \
     template <class WriterT> void Asm::Assembler<WriterT>:: \
-    name (immtype imm) { cmp_XX_imm32_<WriterT, rexbyte, opcode, immtype, immtypesize>(w, imm); }
+    name (immtype imm) \
+    { cmp_XX_imm32_<WriterT, rexbyte, opcode, immtype, immtypesize>(w, imm); }
 INST(cmp_al_imm8, 0, 0x3C, uint8_t, SIZE_8)
 INST(cmp_eax_imm32, 0, 0x3D, uint32_t, SIZE_32)
 INST(cmp_rax_imm32, REX_PREFIX | REX_W, 0x3D, uint32_t, SIZE_32)
@@ -398,7 +410,8 @@ static void incdec_(WriterT &w, ModrmSib modrmsib)
 
 #define INST(name, extension) \
     template <class WriterT> void Asm::Assembler<WriterT>:: \
-    name(ModrmSib const &modrmsib) { incdec_<WriterT, extension>(w, modrmsib); }
+    name(ModrmSib const &modrmsib) \
+    { incdec_<WriterT, extension>(w, modrmsib); }
 INST(inc_rm, EAX/*0*/)
 INST(dec_rm, ECX/*1*/)
 #undef INST
@@ -431,11 +444,13 @@ static void XX_st_rel_(WriterT &w, DispT disp, BranchHint hint)
 }
 #define INST(prefix, opcode) \
     template <class WriterT> void Asm::Assembler<WriterT>:: \
-    prefix ## _st_rel8 (Disp<int8_t> disp, BranchHint hint) { XX_st_rel_<WriterT, 0, opcode, Disp<int8_t>, DISP_SIZE_8>(w, disp, hint); }
+    prefix ## _st_rel8 (Disp<int8_t> disp, BranchHint hint) \
+    { XX_st_rel_<WriterT, 0, opcode, Disp<int8_t>, DISP_SIZE_8>(w, disp, hint); }
 #define INST2(prefix, opcode) \
     INST(prefix, opcode) \
     template <class WriterT> void Asm::Assembler<WriterT>:: \
-    prefix ## _nr_rel32 (Disp<int32_t> disp, BranchHint hint) { XX_st_rel_<WriterT, 0x0F, opcode + 0x10, Disp<int32_t>, DISP_SIZE_32 >(w, disp, hint); }
+    prefix ## _nr_rel32 (Disp<int32_t> disp, BranchHint hint) \
+    { XX_st_rel_<WriterT, 0x0F, opcode + 0x10, Disp<int32_t>, DISP_SIZE_32 >(w, disp, hint); }
 INST2(ja, 0x77) INST2(jbe, 0x76) INST2(jc, 0x72)
 INST2(jg, 0x7F) INST2(jge, 0x7D) INST2(jl, 0x7C)
 INST2(jle, 0x7E) INST2(jnc, 0x73) INST2(jno, 0x71)
@@ -458,9 +473,10 @@ static void jmp_nr_relXX_(WriterT &w, IntT disp)
     w.a(reinterpret_cast<uint8_t *>(&disp), IntTSize);
 }
 
-#define INST(name, int_t, int_t_size)                                  \
+#define INST(name, int_t, int_t_size) \
     template <class WriterT> void Asm::Assembler<WriterT>:: \
-    name(int_t disp) { jmp_nr_relXX_<WriterT, int_t, int_t_size>(w, disp); }
+    name(int_t disp) \
+    { jmp_nr_relXX_<WriterT, int_t, int_t_size>(w, disp); }
 INST(jmp_nr_rel8, int8_t, SIZE_8)
 INST(jmp_nr_rel32, int32_t, SIZE_32)
 #undef INST
@@ -492,9 +508,11 @@ static void mov_rm_reg_(WriterT &w, ModrmSib const &modrmsib)
     write_disp(w, modrmsib);
 }
 template <class WriterT>
-void Asm::Assembler<WriterT>::mov_rm_reg(ModrmSib const &modrmsib) { mov_rm_reg_<WriterT, false>(w, modrmsib); }
+void Asm::Assembler<WriterT>::mov_rm_reg(ModrmSib const &modrmsib)
+{ mov_rm_reg_<WriterT, false>(w, modrmsib); }
 template <class WriterT>
-void Asm::Assembler<WriterT>::mov_reg_rm(ModrmSib const &modrmsib) { mov_rm_reg_<WriterT, true>(w, modrmsib); }
+void Asm::Assembler<WriterT>::mov_reg_rm(ModrmSib const &modrmsib)
+{ mov_rm_reg_<WriterT, true>(w, modrmsib); }
 
 template <class WriterT>
 void Asm::Assembler<WriterT>::mov_moffs64_rax(uint64_t addr)
@@ -566,11 +584,12 @@ void Asm::VectorWriter::a(const uint8_t *buf, std::size_t buflength)
                                           newlength,
                                           PROT_READ | PROT_WRITE | PROT_EXEC));
         if (! mem) {
-            uint8_t *newmem = static_cast<uint8_t *>(mmap(0,
-                                                      newlength,
-                                                      PROT_READ | PROT_WRITE | PROT_EXEC,
-                                                      MAP_PRIVATE | MAP_ANONYMOUS,
-                                                      -1, 0));
+            uint8_t *newmem =
+                static_cast<uint8_t *>(mmap(0,
+                                            newlength,
+                                            PROT_READ | PROT_WRITE | PROT_EXEC,
+                                            MAP_PRIVATE | MAP_ANONYMOUS,
+                                            -1, 0));
             memcpy(newmem, mem, length - freebytes);
             memcpy(newmem + length - freebytes, buf, buflength);
             munmap(mem, length);
