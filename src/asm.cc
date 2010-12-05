@@ -479,6 +479,9 @@ static void fld_mX_(WriterT w, ModrmSib modrmsib)
 INST(fld_m32fp, 0xD9, EAX/*0*/)
 INST(fld_m64fp, 0xDD, EAX/*0*/)
 INST(fld_m80fp, 0xDB, EBP/*5*/)
+INST(fild_m16int, 0xDF, EAX/*0*/)
+INST(fild_m32int, 0xDB, EAX/*0*/)
+INST(fild_m64int, 0xDF, EBP/*5*/)
 #undef INST
 
 template <class WriterT> void Asm::Assembler<WriterT>::fld_st(unsigned streg)
@@ -492,6 +495,44 @@ template <class WriterT> void Asm::Assembler<WriterT>::fld_st(unsigned streg)
 // FNOP
 //
 template <class WriterT> void Asm::Assembler<WriterT>::fnop() { AZ("\xD9\xD0"); }
+
+//
+// FST
+//
+template <class WriterT, uint8_t OPCODE, Register EXTENSION>
+static void fst_mXX_st0_(WriterT &w, ModrmSib modrmsib)
+{
+    assert(modrmsib.simple_memory());
+    AB(OPCODE);
+    modrmsib.reg = EXTENSION;
+    write_modrmsib(w, raw_modrmsib(modrmsib));
+}
+
+#define INST(name, opcode, extension) \
+    template <class WriterT> void Asm::Assembler<WriterT>::     \
+    name (ModrmSib const &modrmsib) \
+    { fst_mXX_st0_<WriterT, opcode, extension>(w, modrmsib); }
+INST(fst_m32fp_st0, 0xD9, EDX/*2*/)
+INST(fst_m64fp_st0, 0xDD, EDX/*2*/)
+INST(fstp_m32fp_st0, 0xD9, EBX/*3*/)
+INST(fstp_m64fp_st0, 0xDD, EBX/*3*/)
+INST(fstp_m80fp_st0, 0xDB, EDI/*7*/)
+#undef INST
+
+template <class WriterT>
+void Asm::Assembler<WriterT>::fst_st_st0(unsigned streg_dest)
+{
+    assert(streg_dest < 8);
+    AB(0xDD);
+    AB(0xD0 + streg_dest);
+}
+template <class WriterT>
+void Asm::Assembler<WriterT>::fstp_st_st0(unsigned streg_dest)
+{
+    assert(streg_dest < 8);
+    AB(0xDD);
+    AB(0xD8 + streg_dest);
+}
 
 //
 // IDIV, IMUL, MUL

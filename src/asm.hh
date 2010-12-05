@@ -203,11 +203,14 @@ public:
     // FDIVP
     void fdivp();
 
-    // FIADD, FIDIV, FIMUL, FISUB
+    // FIADD, FIDIV, FILD, FIMUL, FISUB
     void fiadd_m32int(ModrmSib const &modrmsib);
     void fiadd_m16int(ModrmSib const &modrmsib);
     void fidiv_m32int(ModrmSib const &modrmsib);
     void fidiv_m16int(ModrmSib const &modrmsib);
+    void fild_m16int(ModrmSib const &modrmsib);
+    void fild_m32int(ModrmSib const &modrmsib);
+    void fild_m64int(ModrmSib const &modrmsib);
     void fimul_m32int(ModrmSib const &modrmsib);
     void fimul_m16int(ModrmSib const &modrmsib);
     void fisub_m32int(ModrmSib const &modrmsib);
@@ -230,6 +233,17 @@ public:
 
     // FNOP
     void fnop();
+
+    // FST
+    void fst_m32fp_st0(ModrmSib const &modrmsib);
+    void fst_m64fp_st0(ModrmSib const &modrmsib);
+    void fst_st_st0(unsigned streg_dest);
+
+    // FSTP
+    void fstp_m32fp_st0(ModrmSib const &modrmsib);
+    void fstp_m64fp_st0(ModrmSib const &modrmsib);
+    void fstp_m80fp_st0(ModrmSib const &modrmsib);
+    void fstp_st_st0(unsigned streg_dest);
 
     // FSUB
     void fsub_st0_m32fp(ModrmSib const &modrmsib);
@@ -311,7 +325,6 @@ public:
     void jrcxz_nr_rel32(Disp<int32_t> disp, BranchHint hint=BRANCH_HINT_NONE);
     void js_nr_rel32(Disp<int32_t> disp, BranchHint hint=BRANCH_HINT_NONE);
     void jz_nr_rel32(Disp<int32_t> disp, BranchHint hint=BRANCH_HINT_NONE);
-
     void ja_st_rel16(Disp<int16_t> disp, BranchHint hint=BRANCH_HINT_NONE);
     void ja_st_rel32(Disp<int32_t> disp, BranchHint hint=BRANCH_HINT_NONE);
 
