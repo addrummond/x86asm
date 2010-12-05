@@ -145,6 +145,11 @@ Register Asm::ModrmSib::simple_register() const
         return NOT_A_REGISTER;
 }
 
+bool Asm::ModrmSib::simple_memory() const
+{
+    return disp_size != DISP_SIZE_NONE && reg == NOT_A_REGISTER;
+}
+
 bool Asm::ModrmSib::gp3264_registers_only() const
 {
     return (rm_reg == NOT_A_REGISTER || (rm_reg >= EAX && rm_reg <= R15D)) &&
@@ -391,6 +396,74 @@ INST(cmp_al_imm8, 0, 0x3C, uint8_t, SIZE_8)
 INST(cmp_eax_imm32, 0, 0x3D, uint32_t, SIZE_32)
 INST(cmp_rax_imm32, REX_PREFIX | REX_W, 0x3D, uint32_t, SIZE_32)
 #undef INST
+
+//
+// FADD, FSUB
+//
+template <class WriterT, uint8_t OPCODE, Register EXTENSION>
+static void fadd_st0_mXXfp_(WriterT w, ModrmSib modrmsib)
+{
+    assert(modrmsib.simple_memory());
+    AB(OPCODE);
+    modrmsib.reg = EXTENSION;
+    write_modrmsib(w, raw_modrmsib(modrmsib));
+}
+
+#define INST(name, opcode, extension) \
+    template <class WriterT> void Asm::Assembler<WriterT>:: \
+    name (ModrmSib const &modrmsib) \
+    { fadd_st0_mXXfp_<WriterT, opcode, extension>(w, modrmsib); }
+INST(fadd_st0_m32fp, 0xD8, EAX/*0*/)
+INST(fadd_st0_m64fp, 0xDC, EAX/*0*/)
+INST(fsub_st0_m32fp, 0xD8, ESP/*4*/)
+INST(fsub_st0_m64fp, 0xDC, ESP/*4*/)
+#undef INST
+
+template <class WriterT, uint8_t OPCODE1, uint8_t OPCODE2>
+static void fadd_st_st_(WriterT &w, unsigned streg)
+{
+    assert(streg < 8);
+    AB(OPCODE1);
+    AB(OPCODE2 + streg);
+}
+
+#define INST(name, opcode1, opcode2) \
+    template <class WriterT> void Asm::Assembler<WriterT>:: \
+    name (unsigned streg) \
+    { fadd_st_st_<WriterT, opcode1, opcode2>(w, streg); }
+INST(fadd_st_st0, 0xDC, 0xC0)
+INST(fadd_st0_st, 0xD8, 0xC0)
+INST(fsub_st_st0, 0xDC, 0xE8)
+INST(fsub_st0_st, 0xD8, 0xE0)
+#undef INST
+
+//
+// FLD
+//
+template <class WriterT, uint8_t OPCODE, Register EXTENSION>
+static void fld_mX_(WriterT w, ModrmSib modrmsib)
+{
+    assert(modrmsib.simple_memory());
+    AB(OPCODE);
+    modrmsib.reg = EXTENSION;
+    write_modrmsib(w, raw_modrmsib(modrmsib));
+}
+
+#define INST(name, opcode, extension) \
+    template <class WriterT> void Asm::Assembler<WriterT>:: \
+    name (ModrmSib const &modrmsib) \
+    { fld_mX_<WriterT, opcode, extension>(w, modrmsib); }
+INST(fld_m32fp, 0xD9, EAX/*0*/)
+INST(fld_m64fp, 0xDD, EAX/*0*/)
+INST(fld_m80fp, 0xDB, EBP/*5*/)
+#undef INST
+
+template <class WriterT> void Asm::Assembler<WriterT>::fld_st(unsigned streg)
+{
+    assert(streg < 8);
+    AB(0xD9);
+    AB(0xC0 + streg);
+}
 
 //
 // IDIV, IMUL, MUL

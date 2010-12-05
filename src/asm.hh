@@ -27,7 +27,8 @@ enum Size {
     SIZE_8=1,
     SIZE_16=2,
     SIZE_32=4,
-    SIZE_64=8
+    SIZE_64=8,
+    SIZE_80=10,
 };
 
 enum DispSize {
@@ -78,6 +79,8 @@ struct ModrmSib {
     bool gp3264_registers_only() const;
     // Checks that all register operands in a ModRM byte have a given (byte) size.
     bool all_register_operands_have_size(Size size) const;
+    // True if it specifies a memory location only with no additional register operand.
+    bool simple_memory() const;
 
     Register rm_reg;
     Register reg;
@@ -181,6 +184,27 @@ public:
     void dec_reg8(Register reg) { dec_rm8(reg_ModrmSib(reg)); }
     void dec_reg32(Register reg) { dec_rm32(reg_ModrmSib(reg)); }
     void dec_reg64(Register reg) { dec_rm64(reg_ModrmSib(reg)); }
+
+    // FADD
+    void fadd_st0_m32fp(ModrmSib const &modrmsib);
+    void fadd_st0_m64fp(ModrmSib const &modrbsib);
+    void fadd_st_st0(unsigned streg_src);
+    void fadd_st0_st(unsigned streg_dest);
+    
+    // FADDP
+//    void faddp();
+
+    // FLD
+    void fld_m32fp(ModrmSib const &modrmsib);
+    void fld_m64fp(ModrmSib const &mosrmsib);
+    void fld_m80fp(ModrmSib const &modrbsib);
+    void fld_st(unsigned streg);
+
+    // FSUB
+    void fsub_st0_m32fp(ModrmSib const &modrmsib);
+    void fsub_st0_m64fp(ModrmSib const &modrbsib);
+    void fsub_st_st0(unsigned streg_src);
+    void fsub_st0_st(unsigned streg_dest);
 
     // IDIV
     void idiv_ax_al_rm8(ModrmSib const &modrmsib);
