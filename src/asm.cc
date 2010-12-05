@@ -398,7 +398,7 @@ INST(cmp_rax_imm32, REX_PREFIX | REX_W, 0x3D, uint32_t, SIZE_32)
 #undef INST
 
 //
-// FADD, FADDP, FDIV, FDIVP, FMUL, FMULP, FSUB, FSUBP
+// FADD, FADDP, FDIV, FDIVP, FIADD, FIDIV, FIMUL, FISUB, FMUL, FMULP, FSUB, FSUBP
 //
 template <class WriterT, uint8_t OPCODE, Register EXTENSION>
 static void fadd_st0_mXXfp_(WriterT w, ModrmSib modrmsib)
@@ -421,6 +421,13 @@ INST(fmul_st0_m32fp, 0xD8, ECX/*1*/)
 INST(fmul_st0_m64fp, 0xDC, ECX/*1*/)
 INST(fdiv_st0_m32fp, 0xD8, ESI/*6*/)
 INST(fdiv_st0_m64fp, 0xDC, ESI/*6*/)
+
+INST(fiadd_m32int, 0xDA, RAX/*0*/)
+INST(fiadd_m16int, 0xDE, RAX/*0*/)
+INST(fisub_m32int, 0xDA, ESP/*4*/)
+INST(fisub_m16int, 0xDE, ESP/*4*/)
+INST(fimul_m32int, 0xDA, ECX/*1*/)
+INST(fimul_m16int, 0xDE, ECX/*1*/)
 #undef INST
 
 template <class WriterT, uint8_t OPCODE1, uint8_t OPCODE2>
@@ -480,6 +487,11 @@ template <class WriterT> void Asm::Assembler<WriterT>::fld_st(unsigned streg)
     AB(0xD9);
     AB(0xC0 + streg);
 }
+
+//
+// FNOP
+//
+template <class WriterT> void Asm::Assembler<WriterT>::fnop() { AZ("\xD9\xD0"); }
 
 //
 // IDIV, IMUL, MUL

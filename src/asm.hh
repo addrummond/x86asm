@@ -203,6 +203,16 @@ public:
     // FDIVP
     void fdivp();
 
+    // FIADD, FIDIV, FIMUL, FISUB
+    void fiadd_m32int(ModrmSib const &modrmsib);
+    void fiadd_m16int(ModrmSib const &modrmsib);
+    void fidiv_m32int(ModrmSib const &modrmsib);
+    void fidiv_m16int(ModrmSib const &modrmsib);
+    void fimul_m32int(ModrmSib const &modrmsib);
+    void fimul_m16int(ModrmSib const &modrmsib);
+    void fisub_m32int(ModrmSib const &modrmsib);
+    void fisub_m16int(ModrmSib const &modrmsib);
+
     // FLD
     void fld_m32fp(ModrmSib const &modrmsib);
     void fld_m64fp(ModrmSib const &mosrmsib);
@@ -217,6 +227,9 @@ public:
 
     // FMULP
     void fmulp();
+
+    // FNOP
+    void fnop();
 
     // FSUB
     void fsub_st0_m32fp(ModrmSib const &modrmsib);
