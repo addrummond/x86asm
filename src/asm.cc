@@ -398,7 +398,7 @@ INST(cmp_rax_imm32, REX_PREFIX | REX_W, 0x3D, uint32_t, SIZE_32)
 #undef INST
 
 //
-// FADD, FSUB
+// FADD, FADDP, FDIV, FDIVP, FMUL, FMULP, FSUB, FSUBP
 //
 template <class WriterT, uint8_t OPCODE, Register EXTENSION>
 static void fadd_st0_mXXfp_(WriterT w, ModrmSib modrmsib)
@@ -417,6 +417,10 @@ INST(fadd_st0_m32fp, 0xD8, EAX/*0*/)
 INST(fadd_st0_m64fp, 0xDC, EAX/*0*/)
 INST(fsub_st0_m32fp, 0xD8, ESP/*4*/)
 INST(fsub_st0_m64fp, 0xDC, ESP/*4*/)
+INST(fmul_st0_m32fp, 0xD8, ECX/*1*/)
+INST(fmul_st0_m64fp, 0xDC, ECX/*1*/)
+INST(fdiv_st0_m32fp, 0xD8, ESI/*6*/)
+INST(fdiv_st0_m64fp, 0xDC, ESI/*6*/)
 #undef INST
 
 template <class WriterT, uint8_t OPCODE1, uint8_t OPCODE2>
@@ -435,6 +439,18 @@ INST(fadd_st_st0, 0xDC, 0xC0)
 INST(fadd_st0_st, 0xD8, 0xC0)
 INST(fsub_st_st0, 0xDC, 0xE8)
 INST(fsub_st0_st, 0xD8, 0xE0)
+INST(fmul_st_st0, 0xDC, 0xC8)
+INST(fmul_st0_st, 0xD8, 0xC8)
+INST(fdiv_st_st0, 0xDC, 0xF8)
+INST(fdiv_st0_st, 0xD8, 0xF0)
+#undef INST
+
+#define INST(name, opcode) \
+    template <class WriterT> void Asm::Assembler<WriterT>::name() { AZ(opcode); }
+INST(faddp, "\xDE\xC1")
+INST(fsubp, "\xDE\xE9")
+INST(fmulp, "\xDE\xC9")
+INST(fdivp, "\xDE\xF9")
 #undef INST
 
 //

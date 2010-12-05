@@ -192,7 +192,16 @@ public:
     void fadd_st0_st(unsigned streg_dest);
     
     // FADDP
-//    void faddp();
+    void faddp();
+
+    // FDIV
+    void fdiv_st0_m32fp(ModrmSib const &modrmsib);
+    void fdiv_st0_m64fp(ModrmSib const &modrbsib);
+    void fdiv_st_st0(unsigned streg_src);
+    void fdiv_st0_st(unsigned streg_dest);
+
+    // FDIVP
+    void fdivp();
 
     // FLD
     void fld_m32fp(ModrmSib const &modrmsib);
@@ -200,11 +209,23 @@ public:
     void fld_m80fp(ModrmSib const &modrbsib);
     void fld_st(unsigned streg);
 
+    // FMUL
+    void fmul_st0_m32fp(ModrmSib const &modrmsib);
+    void fmul_st0_m64fp(ModrmSib const &modrbsib);
+    void fmul_st_st0(unsigned streg_src);
+    void fmul_st0_st(unsigned streg_dest);
+
+    // FMULP
+    void fmulp();
+
     // FSUB
     void fsub_st0_m32fp(ModrmSib const &modrmsib);
     void fsub_st0_m64fp(ModrmSib const &modrbsib);
     void fsub_st_st0(unsigned streg_src);
     void fsub_st0_st(unsigned streg_dest);
+
+    // FSUBP
+    void fsubp();
 
     // IDIV
     void idiv_ax_al_rm8(ModrmSib const &modrmsib);
