@@ -2,6 +2,7 @@
 #include <asm.hh>
 #include <cstdio>
 #include <iostream>
+#include <util.hh>
 
 using namespace Asm;
 
@@ -67,7 +68,7 @@ void test1()
 
     std::printf("TEST 1: foo = 0x%llx, bar = 0x%llx, foobar[1] = 0x%llx, foobar[2] = 0x%llx\n", foo, bar, foobar[1], foobar[2]);
     assert(foo == 5 && bar == 5 && foobar[1] == -5 && foobar[2] == 345);
-    std::printf("* OK\n");
+    std::printf("* OK\n\n");
 }
 
 //
@@ -100,7 +101,7 @@ void test2()
 
     std::printf("TEST 2: val = 0x%llx\n", val);
     assert(val == 1);
-    std::printf("* OK\n");
+    std::printf("* OK\n\n");
 }
 
 //
@@ -139,7 +140,62 @@ void test3()
 
     std::printf("TEST 3: val = 0x%llx\n", val);
     assert(val == 0x20);
-    std::printf("* OK\n");
+    std::printf("* OK\n\n");
+}
+
+//
+// Loops and tests a few floating point operations.
+// (Some of the back-and-forth between registers and memory is unnecessary,
+// but useful for testing.)
+//
+void test4()
+{
+    long double fval = 1.0;
+    int64_t integer_two = 2;
+    long double double_hundred = 100.0;
+    double double_point_3 = 0.3;
+
+    VectorWriter w(100000);
+    VectorAssembler a(w);
+
+    // Code in loop.
+    std:size_t loop_start = w.size();
+    // Load fval into the first FP reg.
+    a.mov_reg_imm64(RCX, ptr(&fval));
+    a.fld_m80fp(mem_ModrmSib1op(RCX));
+    // Multiply this value by (integer) 2.
+    a.mov_reg_imm64(RCX, ptr(&integer_two));
+    a.fimul_st0_m32int(mem_ModrmSib1op(RCX));
+    // Divide this value by 0.3
+    a.mov_reg_imm64(RCX, ptr(&double_point_3));
+    a.fdiv_st0_m64fp(mem_ModrmSib1op(RCX));
+    // Compare the result to 100.
+    a.mov_reg_imm64(RCX, ptr(&double_hundred));
+    a.fld_m80fp(mem_ModrmSib1op(RCX));
+    a.fcomp_st0_st(1);
+    // Put the result back in 'fval'.
+    a.mov_reg_imm64(RCX, ptr(&fval));
+    a.fstp_m80fp_st0(mem_ModrmSib1op(RCX));
+    std::size_t loop_end = w.size();
+
+    // Loop if 'fval' is less than 100.
+    a.ja_st_rel8(mkdisp(static_cast<int8_t>(-(loop_end-loop_start)), DISP_SUB_ISIZE), BRANCH_HINT_TAKEN);
+
+    a.ret();
+
+    w.debug_print();
+    w.get_exec_func()();
+
+    // C code to compute the same value as the ASM above.
+    long double c_fval = 1.0;
+    do {
+        c_fval *= integer_two;
+        c_fval /= double_point_3;
+    } while (double_hundred > c_fval);
+
+    std::printf("TEST 4: fval = %Lf, c_fval = %Lf\n", fval, c_fval);
+    assert(c_fval == fval);
+    std::printf("* OK\n\n");
 }
 
 int main()
@@ -147,6 +203,7 @@ int main()
     test1();
     test2();
     test3();
+    test4();
 
     return 0;
 }

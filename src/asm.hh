@@ -185,6 +185,9 @@ public:
     void dec_reg32(Register reg) { dec_rm32(reg_ModrmSib(reg)); }
     void dec_reg64(Register reg) { dec_rm64(reg_ModrmSib(reg)); }
 
+    // FABS
+    void fabs_st0();
+
     // FADD
     void fadd_st0_m32fp(ModrmSib const &modrmsib);
     void fadd_st0_m64fp(ModrmSib const &modrbsib);
@@ -193,6 +196,13 @@ public:
     
     // FADDP
     void faddp();
+
+    // FCOM
+    void fcom_st0_st(unsigned streg);
+    void fcomp_st0_st(unsigned streg);
+
+    // FDECSTP
+    void fdecstp();
 
     // FDIV
     void fdiv_st0_m32fp(ModrmSib const &modrmsib);
@@ -203,18 +213,21 @@ public:
     // FDIVP
     void fdivp();
 
+    // FINCSTP
+    void fincstp();
+
     // FIADD, FIDIV, FILD, FIMUL, FISUB
-    void fiadd_m32int(ModrmSib const &modrmsib);
-    void fiadd_m16int(ModrmSib const &modrmsib);
-    void fidiv_m32int(ModrmSib const &modrmsib);
-    void fidiv_m16int(ModrmSib const &modrmsib);
+    void fiadd_st0_m32int(ModrmSib const &modrmsib);
+    void fiadd_st0_m16int(ModrmSib const &modrmsib);
+    void fidiv_st0_m32int(ModrmSib const &modrmsib);
+    void fidiv_st0_m16int(ModrmSib const &modrmsib);
     void fild_m16int(ModrmSib const &modrmsib);
     void fild_m32int(ModrmSib const &modrmsib);
     void fild_m64int(ModrmSib const &modrmsib);
-    void fimul_m32int(ModrmSib const &modrmsib);
-    void fimul_m16int(ModrmSib const &modrmsib);
-    void fisub_m32int(ModrmSib const &modrmsib);
-    void fisub_m16int(ModrmSib const &modrmsib);
+    void fimul_st0_m32int(ModrmSib const &modrmsib);
+    void fimul_st0_m16int(ModrmSib const &modrmsib);
+    void fisub_st0_m32int(ModrmSib const &modrmsib);
+    void fisub_st0_m16int(ModrmSib const &modrmsib);
 
     // FLD
     void fld_m32fp(ModrmSib const &modrmsib);
@@ -253,6 +266,10 @@ public:
 
     // FSUBP
     void fsubp();
+
+    // FUCOM
+    void fucom_st0_st(unsigned streg);
+    void fucomp_st0_st(unsigned streg);
 
     // IDIV
     void idiv_ax_al_rm8(ModrmSib const &modrmsib);
@@ -325,8 +342,6 @@ public:
     void jrcxz_nr_rel32(Disp<int32_t> disp, BranchHint hint=BRANCH_HINT_NONE);
     void js_nr_rel32(Disp<int32_t> disp, BranchHint hint=BRANCH_HINT_NONE);
     void jz_nr_rel32(Disp<int32_t> disp, BranchHint hint=BRANCH_HINT_NONE);
-    void ja_st_rel16(Disp<int16_t> disp, BranchHint hint=BRANCH_HINT_NONE);
-    void ja_st_rel32(Disp<int32_t> disp, BranchHint hint=BRANCH_HINT_NONE);
 
     // JMP
     void jmp_nr_rel8(int8_t disp);

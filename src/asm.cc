@@ -398,10 +398,16 @@ INST(cmp_rax_imm32, REX_PREFIX | REX_W, 0x3D, uint32_t, SIZE_32)
 #undef INST
 
 //
+// FABS
+//
+template <class WriterT>
+void Asm::Assembler<WriterT>::fabs_st0() { AZ("\xD9\xE1"); }
+
+//
 // FADD, FADDP, FDIV, FDIVP, FIADD, FIDIV, FIMUL, FISUB, FMUL, FMULP, FSUB, FSUBP
 //
 template <class WriterT, uint8_t OPCODE, Register EXTENSION>
-static void fadd_st0_mXXfp_(WriterT w, ModrmSib modrmsib)
+static void fadd_st0_mXXfp_(WriterT &w, ModrmSib modrmsib)
 {
     assert(modrmsib.simple_memory());
     AB(OPCODE);
@@ -422,12 +428,12 @@ INST(fmul_st0_m64fp, 0xDC, ECX/*1*/)
 INST(fdiv_st0_m32fp, 0xD8, ESI/*6*/)
 INST(fdiv_st0_m64fp, 0xDC, ESI/*6*/)
 
-INST(fiadd_m32int, 0xDA, RAX/*0*/)
-INST(fiadd_m16int, 0xDE, RAX/*0*/)
-INST(fisub_m32int, 0xDA, ESP/*4*/)
-INST(fisub_m16int, 0xDE, ESP/*4*/)
-INST(fimul_m32int, 0xDA, ECX/*1*/)
-INST(fimul_m16int, 0xDE, ECX/*1*/)
+INST(fiadd_st0_m32int, 0xDA, RAX/*0*/)
+INST(fiadd_st0_m16int, 0xDE, RAX/*0*/)
+INST(fisub_st0_m32int, 0xDA, ESP/*4*/)
+INST(fisub_st0_m16int, 0xDE, ESP/*4*/)
+INST(fimul_st0_m32int, 0xDA, ECX/*1*/)
+INST(fimul_st0_m16int, 0xDE, ECX/*1*/)
 #undef INST
 
 template <class WriterT, uint8_t OPCODE1, uint8_t OPCODE2>
@@ -461,10 +467,39 @@ INST(fdivp, "\xDE\xF9")
 #undef INST
 
 //
+// FCOM, FCOMP, FUCOM, FUCOMP
+//
+template <class WriterT, uint8_t OPCODE1, uint8_t OPCODE2>
+static void Xcom_st_sti(WriterT &w, unsigned streg)
+{
+    assert(streg < 8);
+    AB(OPCODE1);
+    AB(OPCODE2 + streg);
+}
+
+#define INST(name, opcode1, opcode2) \
+    template <class WriterT> void Asm::Assembler<WriterT>:: \
+    name (unsigned streg) { Xcom_st_sti<WriterT, opcode1, opcode2>(w, streg); }
+INST(fcom_st0_st, 0xDB, 0xF0)
+INST(fcomp_st0_st, 0xDF, 0xF0)
+INST(fucom_st0_st, 0xDB, 0xE8)
+INST(fucomp_st0_st, 0xDF, 0xE8)
+#undef INST
+
+//
+// FDECSTP, FINCSTP
+//
+#define INST(name, opcode) \
+    template <class WriterT> void Asm::Assembler<WriterT>:: name () { AZ(opcode); }
+INST(fdecstp, "\xD9\xF6")
+INST(fincstp, "\xD9\xF7")
+#undef INST
+
+//
 // FLD
 //
 template <class WriterT, uint8_t OPCODE, Register EXTENSION>
-static void fld_mX_(WriterT w, ModrmSib modrmsib)
+static void fld_mX_(WriterT &w, ModrmSib modrmsib)
 {
     assert(modrmsib.simple_memory());
     AB(OPCODE);
@@ -783,11 +818,11 @@ void Asm::VectorWriter::a(const uint8_t *buf, std::size_t buflength)
     }
     else {
         std::size_t newlength = length - freebytes + buflength + ROOM_AHEAD;
-        mem = static_cast<uint8_t *>(mremap(mem,
-                                          length,
-                                          newlength,
-                                          PROT_READ | PROT_WRITE | PROT_EXEC));
-        if (! mem) {
+        uint8_t *r = static_cast<uint8_t *>(mremap(mem,
+                                                   length,
+                                                   newlength,
+                                                   PROT_READ | PROT_WRITE | PROT_EXEC));
+        if (! r) {
             uint8_t *newmem =
                 static_cast<uint8_t *>(mmap(0,
                                             newlength,
@@ -797,8 +832,10 @@ void Asm::VectorWriter::a(const uint8_t *buf, std::size_t buflength)
             memcpy(newmem, mem, length - freebytes);
             memcpy(newmem + length - freebytes, buf, buflength);
             munmap(mem, length);
+            mem = newmem;
         }
         else {
+            mem = r;
             memcpy(mem + length - freebytes, buf, buflength);
         }
         length = newlength;
@@ -842,12 +879,13 @@ void Asm::VectorWriter::canonical_hex(std::string &o)
 
 void Asm::VectorWriter::debug_print()
 {
+    std::printf("-----\n");
     for (std::size_t i = 0; i < length - freebytes; ++i) {
         if (i != 0 && i % 10 == 0)
             std::printf("\n");
         std::printf("%02x ", static_cast<unsigned>(mem[i]));
     }
-    std::printf("\n\n");
+    std::printf("\n-----\n\n");
 }
 
 uint8_t *Asm::VectorWriter::get_mem()
