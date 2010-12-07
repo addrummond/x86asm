@@ -842,15 +842,24 @@ void Asm::Assembler<WriterT>::mov_moffs64_rax(uint64_t addr)
     A64(addr);
 }
 
-template <class WriterT>
-void Asm::Assembler<WriterT>::mov_reg_imm64(Register reg, uint64_t imm)
+template <class WriterT, class ImmT, Size SIZE>
+static void mov_reg_immX_(Assembler<WriterT> &a, WriterT &w, Register reg, ImmT imm)
 {
-    assert(has_additive_code_64(reg) || has_additive_code_32(reg));
+    assert(((SIZE == SIZE_32 && has_additive_code_32(reg)) ||
+            (SIZE == SIZE_64 && has_additive_code_64(reg))));
     RRC(reg, rex, rcode);
     ABIFNZ(rex);
     AB(0xB8 + rcode);
-    A64(imm);
+    w.a(reinterpret_cast<uint8_t *>(&imm), SIZE);
 }
+
+#define INST(name, immt, size) \
+    template <class WriterT> void Asm::Assembler<WriterT>:: \
+    name (Register reg, immt imm)                              \
+    { mov_reg_immX_<WriterT, immt, size>(*this, w, reg, imm); }
+INST(mov_reg_imm32, uint32_t, SIZE_32)
+INST(mov_reg_imm64, uint64_t, SIZE_64)
+#undef INST
 
 //
 // POP, PUSH
