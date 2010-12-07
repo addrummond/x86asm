@@ -207,60 +207,44 @@ void test4()
     std::printf("* OK\n\n");
 }
 
-unsigned c = 0;
-void f()
-{
-    c = 18;
-    while (1);
-    std::printf("HERE!\n"); std::printf("\n\nBAE!!!!!!\n");
-    std::printf("XXXX\n");
-}
-
 //
 // Call to printf from ASM.
 //
 void test5()
 {
-    char const *fstring = "A number %llx and a string %s.\n";
+    char const *fstring = "A number %llx and a string %s (printed if 'printf' called successfully).\n";
     char const *astring = "A STRING";
-    int64_t displacement;
+    int ret;
 
     VectorWriter w;
     VectorAssembler a(w);
 
-    int64_t faddr = ptr(f);
-    int64_t reladdr;
-
-    a.push_reg(RBP);
+    a.push_reg(RBP); // Function preamble (unnecessary since this func doesn't take any args).
     a.mov_reg_reg(RBP, RSP);
 
-    a.mov_reg_imm64(RDX, faddr);
-    a.lea_reg_m(mem_ModrmSib2op(RAX, RDX));
-//    a.lea_reg_m(rip_ModrmSib2op(RAX, RDX));
-    a.mov_moffs64_rax(ptr(&reladdr));
-    a.mov_reg_imm64(EAX, 0);
-    a.call_rel32((int32_t)reladdr);
+    // <<<<< start of args passed in registers (= all of them).
+    a.mov_reg_imm64(RDI, ptr(fstring));
+    a.mov_reg_imm64(RSI, 15);
+    a.mov_reg_imm64(RDX, ptr(astring));
+    // end of args passed in registers >>>>>
+    a.mov_reg_imm64(RCX, ptr(printf));
+    a.mov_reg_imm32(EAX, 0);
+    a.call_rm64(reg_ModrmSib(RCX));
+    // Move the return value in EAX into the 'ret' var.
+    a.mov_reg_imm64(RCX, ptr(&ret));
+    a.mov_rm32_reg(mem_ModrmSib2op(EAX, RCX));
+    // Clear EAX.
+    a.mov_reg_imm32(EAX, 0);
 
-//    a.leave();
-//    a.ret();
+    a.leave();
+    a.ret();
     
-
-//    a.mov_reg_imm64(RDI, ptr(fstring));
-//    a.mov_reg_imm64(RSI, 15);
-//    a.mov_reg_imm64(RDX, ptr(astring));
-//    a.mov_reg_imm64(RCX, ptr(f));
-//    a.mov_reg_imm64(RAX, 0);
-//    a.call_rm64(mem_ModrmSib1op(RCX));
-//    a.call_rel32((int32_t)((int64_t)(&printf)));
-//    a.leave();
-//    a.ret();
-
     w.debug_print();
     w.get_exec_func()();
 
-    std::printf("REL: %llx ,%i\n", reladdr, c);
-
-//    std::printf("\nRIP: %llx, PRINTF: %llx\n", displacement, ptr(printf));
+    std::printf("CHARACTERS PRINTED: %i\n", ret);
+    assert(ret == 76);
+    std::printf("* OK\n");
 }
 
 int main()
