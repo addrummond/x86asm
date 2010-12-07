@@ -46,11 +46,13 @@ enum Scale {
 };
 
 struct ModrmSib {
-    ModrmSib(Register rm_reg_=NOT_A_REGISTER, DispSize disp_size_=DISP_SIZE_NONE,
+    ModrmSib(bool rip_ = false, Register rm_reg_=NOT_A_REGISTER, DispSize disp_size_=DISP_SIZE_NONE,
              int32_t disp_=0, Register reg_=NOT_A_REGISTER, Register base_reg_=NOT_A_REGISTER, Scale scale_=SCALE_1)
-        : rm_reg(rm_reg_), disp_size(disp_size_), disp(disp_), reg(reg_), base_reg(base_reg_), scale(scale_) { }
+        : rip(rip_), rm_reg(rm_reg_), disp_size(disp_size_), disp(disp_), reg(reg_), base_reg(base_reg_), scale(scale_) { }
 
     // This is horrible, but I suspect there's no significantly-less-horrible alternative scheme.
+    //
+    // TODO: These comments are out of date.
     //
     // WITH NO SIB:
     //     rm_reg    <- R/M (rows on p. 2-7 of IA32 SDM 2A).
@@ -77,11 +79,14 @@ struct ModrmSib {
     Register simple_register() const;
     // Return true if all register operands are GP.
     bool gp3264_registers_only() const;
+    // Returns true if there is no additional reg operand.
+    bool no_reg_operand() const;
     // Checks that all register operands in a ModRM byte have a given (byte) size.
     bool all_register_operands_have_size(Size size) const;
     // True if it specifies a memory location only with no additional register operand.
     bool simple_memory() const;
 
+    bool rip;
     Register rm_reg;
     Register reg;
     Register base_reg;
@@ -95,6 +100,8 @@ ModrmSib mem_ModrmSib2op(Register reg, Register base=NOT_A_REGISTER, Register in
 ModrmSib mem_ModrmSib1op(Register base=NOT_A_REGISTER, Register index=NOT_A_REGISTER, Scale scale=SCALE_1, int32_t displacement=0, bool short_displacement=false);
 ModrmSib reg_ModrmSib(Register reg, Register rm);
 ModrmSib reg_ModrmSib(Register rm);
+ModrmSib rip_ModrmSib1op(int32_t offset);
+ModrmSib rip_ModrmSib2op(Register reg, int32_t offset);
 
 enum Rex {
     REX_PREFIX = 0x40,
@@ -165,6 +172,10 @@ public:
     void add_reg_rm64(ModrmSib const &modrmsib);
     void add_rm32_imm32(ModrmSib const &modrmsib, uint32_t src);
     void add_rm64_imm32(ModrmSib const &modrmsib, uint32_t src);
+
+    // CALL
+    void call_rel32(int32_t disp);
+    void call_rm64(ModrmSib modrmsib);
 
     // CMP
     void cmp_rm8_imm8(ModrmSib const &modrmsib, uint8_t imm);
@@ -348,6 +359,12 @@ public:
     void jmp_nr_rel32(int32_t disp);
     void jmp_nr_rm(ModrmSib const &modrmsib);
 
+    // LEA
+    void lea_reg_m(ModrmSib const &modrmsib);
+
+    // LEAVE
+    void leave();
+
     // MOV
     void mov_reg_reg(Register dest, Register src); // Provided because ordering of args
                                                    // can be confusing if mov_rm_reg is
@@ -361,6 +378,7 @@ public:
     void mov_reg_rm8(ModrmSib const &modrmsib);
     void mov_reg_rm32(ModrmSib const &modrmsib);
     void mov_reg_rm64(ModrmSib const &modrmsib);
+    void mov_reg_imm32(Register reg, uint32_t imm);
     void mov_reg_imm64(Register reg, uint64_t imm);
     void mov_moffs64_rax(uint64_t addr);
 
@@ -368,6 +386,17 @@ public:
     void mul_ax_al_rm8(ModrmSib const &modrmsib);
     void mul_edx_eax_rm32(ModrmSib const &modrmsib);
     void mul_rdx_rax_rm64(ModrmSib const &modrmsib);
+
+    // POP
+    void pop_rm64(ModrmSib const &modrmsib);
+    void pop_reg(Register reg);
+
+    // PUSH
+    void push_rm16(ModrmSib const &modrmsib);
+    void push_rm64(ModrmSib const &modrmsib);
+    void push_reg(Register reg);
+    void push_imm8(uint8_t imm);
+    void push_imm32(uint32_t imm);
 
     // SUB
     void sub_rm8_reg(ModrmSib const &modrmsib);

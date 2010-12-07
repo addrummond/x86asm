@@ -23,6 +23,13 @@ void test1()
 
     // Assembly commented line-by-line in this test only as an example.
 
+    // This test also includes some machinary unnecessary for a 0-argument
+    // void function (saving the base pointer and then restoring it via LEAVE).
+
+    // PUSH RBP
+    a.push_reg(RBP);
+    // MOV RBP, RSP
+    a.mov_reg_reg(RBP, RSP);
     // MOV RAX, 2
     a.mov_reg_imm64(RAX, 1);
     // MOV RDX, 2
@@ -60,6 +67,8 @@ void test1()
     a.dec_reg64(RCX);
     // SUB [RBX+(RCX*8)], 5
     a.sub_rm64_imm32(mem_ModrmSib1op(RBX, RCX, SCALE_8, 0), 5);
+    // LEAVE
+    a.leave();
     // RET
     a.ret();
 
@@ -145,7 +154,7 @@ void test3()
 
 //
 // Loops and tests a few floating point operations.
-// (Some of the back-and-forth between registers and memory is unnecessary,
+// (A lot of the back-and-forth between registers and memory is unnecessary,
 // but useful for testing.)
 //
 void test4()
@@ -155,7 +164,7 @@ void test4()
     long double double_hundred = 100.0;
     double double_point_3 = 0.3;
 
-    VectorWriter w(100000);
+    VectorWriter w;
     VectorAssembler a(w);
 
     // Code in loop.
@@ -198,12 +207,69 @@ void test4()
     std::printf("* OK\n\n");
 }
 
+unsigned c = 0;
+void f()
+{
+    c = 18;
+    while (1);
+    std::printf("HERE!\n"); std::printf("\n\nBAE!!!!!!\n");
+    std::printf("XXXX\n");
+}
+
+//
+// Call to printf from ASM.
+//
+void test5()
+{
+    char const *fstring = "A number %llx and a string %s.\n";
+    char const *astring = "A STRING";
+    int64_t displacement;
+
+    VectorWriter w;
+    VectorAssembler a(w);
+
+    int64_t faddr = ptr(f);
+    int64_t reladdr;
+
+    a.push_reg(RBP);
+    a.mov_reg_reg(RBP, RSP);
+
+    a.mov_reg_imm64(RDX, faddr);
+    a.lea_reg_m(mem_ModrmSib2op(RAX, RDX));
+//    a.lea_reg_m(rip_ModrmSib2op(RAX, RDX));
+    a.mov_moffs64_rax(ptr(&reladdr));
+    a.mov_reg_imm64(EAX, 0);
+    a.call_rel32((int32_t)reladdr);
+
+//    a.leave();
+//    a.ret();
+    
+
+//    a.mov_reg_imm64(RDI, ptr(fstring));
+//    a.mov_reg_imm64(RSI, 15);
+//    a.mov_reg_imm64(RDX, ptr(astring));
+//    a.mov_reg_imm64(RCX, ptr(f));
+//    a.mov_reg_imm64(RAX, 0);
+//    a.call_rm64(mem_ModrmSib1op(RCX));
+//    a.call_rel32((int32_t)((int64_t)(&printf)));
+//    a.leave();
+//    a.ret();
+
+    w.debug_print();
+    w.get_exec_func()();
+
+    std::printf("REL: %llx ,%i\n", reladdr, c);
+
+//    std::printf("\nRIP: %llx, PRINTF: %llx\n", displacement, ptr(printf));
+}
+
 int main()
 {
     test1();
     test2();
     test3();
     test4();
+    test5();
 
     return 0;
 }

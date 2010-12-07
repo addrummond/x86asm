@@ -73,19 +73,37 @@ static bool is_gp3264_register(Register reg)
 struct RawModrmSib {
     uint8_t modrm;
     uint8_t sib; // Set to 0 if none, since 0 is not a valid SIB.
+    bool has_disp;
 };
 static RawModrmSib raw_modrmsib(ModrmSib const &modrmsib)
 {
     RawModrmSib r;
+    r.has_disp = true;
     uint8_t mod, rm, reg;
 
-    // TODO: Check for consistency in size of rm and reg.
+    // The special case of RIP.
+    if (modrmsib.rip) {
+        mod = 0;
+        rm = 5;
+        reg = 0;
+        assert(modrmsib.disp_size == DISP_SIZE_32 &&
+               modrmsib.rm_reg == NOT_A_REGISTER &&
+               modrmsib.scale == SCALE_1 &&
+               modrmsib.base_reg == NOT_A_REGISTER);
+        r.modrm = raw_modrm(mod, rm, modrmsib.reg != NOT_A_REGISTER ? register_code(modrmsib.reg) : 0);
+        r.sib = 0;
+        return r;
+    }
 
     // Set mod.
-    if (modrmsib.disp_size == DISP_SIZE_NONE)
-        mod = 3;
-    else if ((modrmsib.disp == 0 && modrmsib.rm_reg != EBP) || modrmsib.rm_reg == NOT_A_REGISTER)
+    if (modrmsib.disp_size == DISP_SIZE_NONE) {
+         mod = 3;
+         r.has_disp = false;
+    }
+    else if ((modrmsib.disp == 0 && modrmsib.rm_reg != RBP && modrmsib.rm_reg != RSP) || modrmsib.rm_reg == NOT_A_REGISTER) {
         mod = 0;
+        r.has_disp = false;
+    }
     else if(modrmsib.disp_size == DISP_SIZE_8)
         mod = 1;
     else if (modrmsib.disp_size == DISP_SIZE_32)
@@ -96,7 +114,7 @@ static RawModrmSib raw_modrmsib(ModrmSib const &modrmsib)
     else if (modrmsib.rm_reg == NOT_A_REGISTER)
         rm = 5;
     else {
-        assert(is_gp3264_register(modrmsib.rm_reg) && modrmsib.rm_reg != ESP);
+        assert(is_gp3264_register(modrmsib.rm_reg) && modrmsib.rm_reg != RSP);
         rm = register_code(modrmsib.rm_reg);
     }
     // Set reg.
@@ -105,7 +123,7 @@ static RawModrmSib raw_modrmsib(ModrmSib const &modrmsib)
     r.modrm = raw_modrm(mod, rm, reg);
 
     // Add SIB if required.
-    if (modrmsib.scale == SCALE_1) {
+    if (! (mod != 3 && rm == 4)) {
         r.sib = 0;
     }
     else {
@@ -123,7 +141,7 @@ static RawModrmSib raw_modrmsib(ModrmSib const &modrmsib)
         if (modrmsib.rm_reg == NOT_A_REGISTER)
             sib_rm = 4;
         else {
-            assert(is_gp3264_register(modrmsib.rm_reg) && modrmsib.rm_reg != ESP);
+            assert(is_gp3264_register(modrmsib.rm_reg) && modrmsib.rm_reg != RSP);
             sib_rm = register_code(modrmsib.rm_reg);
         }
         // Set reg (base).
@@ -143,6 +161,11 @@ Register Asm::ModrmSib::simple_register() const
         return rm_reg;
     else
         return NOT_A_REGISTER;
+}
+
+bool Asm::ModrmSib::no_reg_operand() const
+{
+    return reg == NOT_A_REGISTER;
 }
 
 bool Asm::ModrmSib::simple_memory() const
@@ -166,7 +189,8 @@ bool Asm::ModrmSib::all_register_operands_have_size(Size size) const
 namespace Asm {
 ModrmSib mem_ModrmSib2op(Register reg, Register base, Register index, Scale scale, int32_t displacement, bool short_displacement)
 {
-    return ModrmSib(/*rm_reg*/    index == NOT_A_REGISTER ? base : index,
+    return ModrmSib(/*rip*/       false,
+                    /*rm_reg*/    index == NOT_A_REGISTER ? base : index,
                     /*disp_size*/ short_displacement ? DISP_SIZE_8 : DISP_SIZE_32,
                     /*disp*/      displacement,
                     /*reg*/       reg,
@@ -179,11 +203,19 @@ ModrmSib mem_ModrmSib1op(Register base, Register index, Scale scale, int32_t dis
 }
 ModrmSib reg_ModrmSib(Register reg, Register rm)
 {
-    return ModrmSib(rm, DISP_SIZE_NONE, /*displacement*/ 0, reg);
+    return ModrmSib(false, rm, DISP_SIZE_NONE, /*displacement*/ 0, reg);
 }
 ModrmSib reg_ModrmSib(Register rm)
 {
-    return ModrmSib(rm);
+    return ModrmSib(false, rm);
+}
+ModrmSib rip_ModrmSib1op(int32_t disp)
+{
+    return ModrmSib(true, NOT_A_REGISTER, DISP_SIZE_32, disp);
+}
+ModrmSib rip_ModrmSib2op(Register reg, int32_t disp)
+{
+    return ModrmSib(true, NOT_A_REGISTER, DISP_SIZE_32, disp, reg);
 }
 }
 
@@ -243,13 +275,14 @@ static void write_modrmsib(WriterT &w, RawModrmSib const &rawmodrmsib)
 template <class WriterT>
 static void write_disp(WriterT &w, ModrmSib const &modrmsib)
 {
-    if (modrmsib.disp != 0) {
+//    if (modrmsib.disp != 0) {
+//    if (modrmsib.disp_size != DISP_SIZE_NONE) {
         if (modrmsib.disp_size == DISP_SIZE_8)
             AB(static_cast<uint8_t>(modrmsib.disp));
         else if (modrmsib.disp_size == DISP_SIZE_32)
             A32(modrmsib.disp);
         else assert(0);
-    }
+//    }
 }
 
 template <class IntT>
@@ -273,8 +306,10 @@ static void X_rm_reg_(WriterT &w, ModrmSib const &modrmsib)
 
     ABIFNZ(compute_rex(modrmsib, RM_SIZE));
     AB(OPCODE);
-    write_modrmsib(w, raw_modrmsib(modrmsib));
-    write_disp(w, modrmsib);
+    RawModrmSib raw = raw_modrmsib(modrmsib);
+    write_modrmsib(w, raw);
+    if (raw.has_disp)
+        write_disp(w, modrmsib);
 }
 
 #define INST(name, opcode, rm_size) \
@@ -306,9 +341,9 @@ INST(sub_reg_rm64, 0x2B, SIZE_64)
 template <class WriterT, Size RM_SIZE, uint8_t SIMPLE_OPCODE, uint8_t COMPLEX_OPCODE, Register EXTENSION>
 static void add_rmXX_imm32_(WriterT &w, ModrmSib modrmsib, uint32_t src)
 {
-    assert(modrmsib.reg == NOT_A_REGISTER
-           && modrmsib.gp3264_registers_only()
-           && modrmsib.all_register_operands_have_size(RM_SIZE));
+    assert(modrmsib.no_reg_operand() &&
+           modrmsib.gp3264_registers_only() &&
+           modrmsib.all_register_operands_have_size(RM_SIZE));
 
     if (modrmsib.simple_register() == EAX) {
         assert(RM_SIZE == SIZE_32);
@@ -325,8 +360,10 @@ static void add_rmXX_imm32_(WriterT &w, ModrmSib modrmsib, uint32_t src)
         if (RM_SIZE == SIZE_64)
             AB(REX_PREFIX | REX_W);
         AB(COMPLEX_OPCODE);
-        write_modrmsib(w, raw_modrmsib(modrmsib));
-        write_disp(w, modrmsib);
+        RawModrmSib raw = raw_modrmsib(modrmsib);
+        write_modrmsib(w, raw);
+        if (raw.has_disp)
+            write_disp(w, modrmsib);
     }
 
     A32(src);
@@ -345,15 +382,36 @@ INST(sub_rm64_imm32, SIZE_64, 0x2D, 0x81, EBP/*5*/)
 #undef INST
 
 //
-// CMP.
+// CALL
 //
+
+template <class WriterT>
+void Asm::Assembler<WriterT>::call_rel32(int32_t disp)
+{
+    AB(0xE8);
+    A32(disp);
+}
+
+template <class WriterT>
+void Asm::Assembler<WriterT>::call_rm64(ModrmSib modrmsib)
+{
+    assert(modrmsib.no_reg_operand());
+    AB(0xFF);
+    modrmsib.reg = EDX/*2*/;
+    write_modrmsib(w, raw_modrmsib(modrmsib));
+}
+
+//
+// CMP
+//
+
 template <class WriterT, unsigned BYTE_SIZE, Size RM_SIZE, uint8_t OPCODE, Register EXTENSION, class ImmT, Size ImmTSize>
 static void cmp_rmXX_imm_(WriterT &w, Assembler<WriterT> &a, ModrmSib modrmsib, ImmT imm)
 {
     assert(modrmsib.gp3264_registers_only() &&
-          modrmsib.reg == NOT_A_REGISTER &&
-          (modrmsib.simple_register() != NOT_A_REGISTER ||
-           register_byte_size(modrmsib.simple_register()) == BYTE_SIZE));
+           modrmsib.no_reg_operand() &&
+           (modrmsib.simple_register() != NOT_A_REGISTER ||
+            register_byte_size(modrmsib.simple_register()) == BYTE_SIZE));
 
     if (BYTE_SIZE == 8 && ImmTSize == 4 && modrmsib.simple_register() == RAX) {
         a.cmp_rax_imm32(imm);
@@ -593,7 +651,7 @@ INST(imul_reg_rm64, SIZE_64)
 template <class WriterT, uint8_t OPCODE, Size RM_SIZE, Register EXTENSION>
 static void mul_dxax_rm_(WriterT &w, ModrmSib modrmsib)
 {
-    assert(modrmsib.reg == NOT_A_REGISTER &&
+    assert(modrmsib.no_reg_operand() &&
            modrmsib.gp3264_registers_only() &&
            modrmsib.all_register_operands_have_size(RM_SIZE));
 
@@ -625,7 +683,7 @@ INST(mul_ax_al_rm8, 0xF6, SIZE_8, ESP/*4*/)
 template <class WriterT, Register EXTENSION, uint8_t OPCODE, Size RM_SIZE>
 static void incdec_(WriterT &w, ModrmSib modrmsib)
 {
-    assert(modrmsib.reg == NOT_A_REGISTER &&
+    assert(modrmsib.no_reg_operand() &&
            modrmsib.gp3264_registers_only() &&
            modrmsib.all_register_operands_have_size(RM_SIZE));
 
@@ -713,6 +771,28 @@ INST(jmp_nr_rel32, int32_t, SIZE_32)
 #undef INST
 
 //
+// LEA
+//
+template <class WriterT>
+void Asm::Assembler<WriterT>::lea_reg_m(ModrmSib const &modrmsib)
+{
+    assert(! modrmsib.no_reg_operand());
+    ABIFNZ(compute_rex(modrmsib, (Size)0));
+    AB(0x8D);
+    write_modrmsib(w, raw_modrmsib(modrmsib));
+}
+
+
+//
+// LEAVE
+//
+
+template <class WriterT>
+void Asm::Assembler<WriterT>::leave() {
+    AB(0xC9);
+}
+
+//
 // MOV
 //
 
@@ -737,8 +817,10 @@ static void mov_rm_reg_(WriterT &w, ModrmSib const &modrmsib)
 
     ABIFNZ(compute_rex(modrmsib, RM_SIZE));
     AB(OPCODE);
-    write_modrmsib(w, raw_modrmsib(modrmsib));
-    write_disp(w, modrmsib);
+    RawModrmSib raw = raw_modrmsib(modrmsib);
+    write_modrmsib(w, raw);
+    if (raw.has_disp)
+        write_disp(w, modrmsib);
 }
 
 #define INST(name, reversed, rm_size) \
@@ -763,12 +845,70 @@ void Asm::Assembler<WriterT>::mov_moffs64_rax(uint64_t addr)
 template <class WriterT>
 void Asm::Assembler<WriterT>::mov_reg_imm64(Register reg, uint64_t imm)
 {
-    assert(has_additive_code_64(reg));
+    assert(has_additive_code_64(reg) || has_additive_code_32(reg));
     RRC(reg, rex, rcode);
     ABIFNZ(rex);
     AB(0xB8 + rcode);
     A64(imm);
 }
+
+//
+// POP, PUSH
+//
+
+template <class WriterT>
+void Asm::Assembler<WriterT>::pop_reg(Register reg)
+{
+    assert(has_additive_code_64(reg));
+    AB(0x58 + register_code(reg));
+}
+
+template <class WriterT>
+void Asm::Assembler<WriterT>::push_reg(Register reg)
+{
+    assert(has_additive_code_64(reg));
+    AB(0x50 + register_code(reg));
+}
+
+template <class WriterT, Size RM_SIZE, uint8_t OPCODE>
+static void push_rmX_(Assembler<WriterT> &a, WriterT &w, ModrmSib modrmsib)
+{
+    assert(modrmsib.no_reg_operand());
+
+    if (has_additive_code_64(modrmsib.simple_register())) {
+        if (OPCODE == 0xFF)
+            a.push_reg(modrmsib.simple_register());
+        else if (OPCODE == 0x8F)
+            a.pop_reg(modrmsib.simple_register());
+    }
+    else {
+        AB(OPCODE);
+        modrmsib.reg = ESI/*6*/;
+        write_modrmsib(w, raw_modrmsib(modrmsib));
+    }
+}
+
+#define INST(name, rm_size, opcode) \
+    template <class WriterT> \
+    void Asm::Assembler<WriterT>:: name (ModrmSib const &modrmsib) \
+    { push_rmX_<WriterT, rm_size, opcode>(*this, w, modrmsib); }
+INST(push_rm64, SIZE_64, 0xFF)
+INST(pop_rm64, SIZE_64, 0x8F)
+#undef INST
+
+template <class WriterT, class ImmT, Size ImmTSize, uint8_t OPCODE>
+static void push_imm_(WriterT &w, ImmT imm)
+{
+    AB(OPCODE);
+    w.a(reinterpret_cast<uint8_t *>(&imm), ImmTSize);
+}
+#define INST(name, immt, immtsize, opcode) \
+    template <class WriterT> \
+    void Asm::Assembler<WriterT>:: name (immt imm) \
+    { push_imm_<WriterT, immt, immtsize, opcode>(w, imm); }
+INST(push_imm8, uint8_t, SIZE_8, 0x6A)
+INST(push_imm32, uint32_t, SIZE_32, 0x68)
+#undef INST
 
 //
 // RET
