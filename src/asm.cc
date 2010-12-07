@@ -285,6 +285,15 @@ static void write_disp(WriterT &w, ModrmSib const &modrmsib)
 //    }
 }
 
+template <class WriterT>
+static void write_modrmsib_disp(WriterT &w, ModrmSib const &modrmsib)
+{
+    RawModrmSib raw = raw_modrmsib(modrmsib);
+    write_modrmsib(w, raw);
+    if (raw.has_disp)
+        write_disp(w, modrmsib);
+}
+
 template <class IntT>
 Disp<IntT> Asm::mkdisp(IntT i, DispOp op) { return Disp<IntT>(i, op); }
 template Disp<int8_t> Asm::mkdisp<int8_t>(int8_t i, DispOp op);
@@ -306,10 +315,7 @@ static void X_rm_reg_(WriterT &w, ModrmSib const &modrmsib)
 
     ABIFNZ(compute_rex(modrmsib, RM_SIZE));
     AB(OPCODE);
-    RawModrmSib raw = raw_modrmsib(modrmsib);
-    write_modrmsib(w, raw);
-    if (raw.has_disp)
-        write_disp(w, modrmsib);
+    write_modrmsib_disp(w, modrmsib);
 }
 
 #define INST(name, opcode, rm_size) \
@@ -360,10 +366,7 @@ static void add_rmXX_imm32_(WriterT &w, ModrmSib modrmsib, uint32_t src)
         if (RM_SIZE == SIZE_64)
             AB(REX_PREFIX | REX_W);
         AB(COMPLEX_OPCODE);
-        RawModrmSib raw = raw_modrmsib(modrmsib);
-        write_modrmsib(w, raw);
-        if (raw.has_disp)
-            write_disp(w, modrmsib);
+        write_modrmsib_disp(w, modrmsib);
     }
 
     A32(src);
@@ -398,7 +401,7 @@ void Asm::Assembler<WriterT>::call_rm64(ModrmSib modrmsib)
     assert(modrmsib.no_reg_operand());
     AB(0xFF);
     modrmsib.reg = EDX/*2*/;
-    write_modrmsib(w, raw_modrmsib(modrmsib));
+    write_modrmsib_disp(w, modrmsib);
 }
 
 //
@@ -420,7 +423,7 @@ static void cmp_rmXX_imm_(WriterT &w, Assembler<WriterT> &a, ModrmSib modrmsib, 
         ABIFNZ(compute_rex(modrmsib, RM_SIZE));
         AB(OPCODE);
         modrmsib.reg = EXTENSION;
-        write_modrmsib(w, raw_modrmsib(modrmsib));
+        write_modrmsib_disp(w, modrmsib);
         w.a(reinterpret_cast<uint8_t*>(&imm), ImmTSize);
     }
 }
@@ -470,7 +473,7 @@ static void fadd_st0_mXXfp_(WriterT &w, ModrmSib modrmsib)
     assert(modrmsib.simple_memory());
     AB(OPCODE);
     modrmsib.reg = EXTENSION;
-    write_modrmsib(w, raw_modrmsib(modrmsib));
+    write_modrmsib_disp(w, modrmsib);
 }
 
 #define INST(name, opcode, extension) \
@@ -562,7 +565,7 @@ static void fld_mX_(WriterT &w, ModrmSib modrmsib)
     assert(modrmsib.simple_memory());
     AB(OPCODE);
     modrmsib.reg = EXTENSION;
-    write_modrmsib(w, raw_modrmsib(modrmsib));
+    write_modrmsib_disp(w, modrmsib);
 }
 
 #define INST(name, opcode, extension) \
@@ -598,7 +601,7 @@ static void fst_mXX_st0_(WriterT &w, ModrmSib modrmsib)
     assert(modrmsib.simple_memory());
     AB(OPCODE);
     modrmsib.reg = EXTENSION;
-    write_modrmsib(w, raw_modrmsib(modrmsib));
+    write_modrmsib_disp(w, modrmsib);
 }
 
 #define INST(name, opcode, extension) \
@@ -637,7 +640,7 @@ static void Xmul_reg_rm_(WriterT &w, ModrmSib const &modrmsib)
            modrmsib.all_register_operands_have_size(RM_SIZE));
     ABIFNZ(compute_rex(modrmsib, RM_SIZE));
     AZ("\x0F\xAF");
-    write_modrmsib(w, raw_modrmsib(modrmsib));
+    write_modrmsib_disp(w, modrmsib);
 }
 
 #define INST(name, rm_size) \
@@ -658,7 +661,7 @@ static void mul_dxax_rm_(WriterT &w, ModrmSib modrmsib)
     ABIFNZ(compute_rex(modrmsib, RM_SIZE));
     AB(OPCODE);
     modrmsib.reg = EXTENSION;
-    write_modrmsib(w, raw_modrmsib(modrmsib));
+    write_modrmsib_disp(w, modrmsib);
 }
 
 #define INST(name, opcode, rm_size, extension)                  \
@@ -690,7 +693,7 @@ static void incdec_(WriterT &w, ModrmSib modrmsib)
     ABIFNZ(compute_rex(modrmsib, RM_SIZE));
     modrmsib.reg = EXTENSION;
     AB(OPCODE);
-    write_modrmsib(w, raw_modrmsib(modrmsib));
+    write_modrmsib_disp(w, modrmsib);
 }
 
 #define INST(name, extension, opcode, rm_size)                      \
@@ -779,7 +782,7 @@ void Asm::Assembler<WriterT>::lea_reg_m(ModrmSib const &modrmsib)
     assert(! modrmsib.no_reg_operand());
     ABIFNZ(compute_rex(modrmsib, (Size)0));
     AB(0x8D);
-    write_modrmsib(w, raw_modrmsib(modrmsib));
+    write_modrmsib_disp(w, modrmsib);
 }
 
 
@@ -817,10 +820,7 @@ static void mov_rm_reg_(WriterT &w, ModrmSib const &modrmsib)
 
     ABIFNZ(compute_rex(modrmsib, RM_SIZE));
     AB(OPCODE);
-    RawModrmSib raw = raw_modrmsib(modrmsib);
-    write_modrmsib(w, raw);
-    if (raw.has_disp)
-        write_disp(w, modrmsib);
+    write_modrmsib_disp(w, modrmsib);
 }
 
 #define INST(name, reversed, rm_size) \
@@ -893,7 +893,7 @@ static void push_rmX_(Assembler<WriterT> &a, WriterT &w, ModrmSib modrmsib)
     else {
         AB(OPCODE);
         modrmsib.reg = ESI/*6*/;
-        write_modrmsib(w, raw_modrmsib(modrmsib));
+        write_modrmsib_disp(w, modrmsib);
     }
 }
 
