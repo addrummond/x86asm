@@ -35,18 +35,18 @@ void test1()
     // MOV RDX, 2
     a.mov_reg_imm64(RDX, 2);
     // IMUL RAX, RDX // {RAX now contains 4}
-    a.imul_reg_rm64(reg_ModrmSib(RAX, RDX));
-    a.imul_reg_rm64(reg_ModrmSib(RAX, RDX));
+    a.imul_reg_rm64(reg_2op(RAX, RDX));
+    a.imul_reg_rm64(reg_2op(RAX, RDX));
     // MOV RDX, RAX
     a.mov_reg_reg(RDX, RAX);
     // INC RDX
     a.inc_reg64(RDX);
     // MOV RAX, RDX {could have used mov_reg_reg here instead}
-    a.mov_rm64_reg(reg_ModrmSib(RDX, RAX));
+    a.mov_rm64_reg(reg_2op(RDX, RAX));
     // MOV RBX, [imm64 -- address of 'foo']
     a.mov_reg_imm64(RBX, ptr(&foo));
     // MOV [RBX], RDX
-    a.mov_rm64_reg(mem_ModrmSib2op(RDX, RBX));
+    a.mov_rm64_reg(mem_2op(RDX, RBX));
     // MOV RAX, [imm64 -- address of 'bar']
     a.mov_moffs64_rax(ptr(&bar));
     // MOV RBX, [imm64 -- address of (first element of) 'foobar']
@@ -54,19 +54,19 @@ void test1()
     // MOV RCX, 1
     a.mov_reg_imm64(RCX, 1);
     // MOV [RBX+(RCX*8)+8], RDX // {Unnecessarily complex method of accessing second element of foobar}
-    a.mov_rm64_reg(mem_ModrmSib2op(RDX, RBX, RCX, SCALE_8, 8));
+    a.mov_rm64_reg(mem_2op(RDX, RBX, RCX, SCALE_8, 8));
     // ADD [RBX+(RCX*8)+8], 340
-    a.add_rm64_imm32(mem_ModrmSib1op(RBX, RCX, SCALE_8, 8), 340);
+    a.add_rm64_imm32(mem_1op(RBX, RCX, SCALE_8, 8), 340);
     // INC RCX
     a.inc_reg64(RCX);
     // ADD [RBX+(RCX*8)], 5 // {Now that RCX has been incremented, we no longer need to add a displacement}
-    a.add_rm32_imm32(mem_ModrmSib1op(RBX, RCX, SCALE_8, 0), 5);
+    a.add_rm32_imm32(mem_1op(RBX, RCX, SCALE_8, 0), 5);
     // SUB [RBX+(RCX*8)], 5
-    a.sub_rm64_imm32(mem_ModrmSib1op(RBX, RCX, SCALE_8, 0), 5);
+    a.sub_rm64_imm32(mem_1op(RBX, RCX, SCALE_8, 0), 5);
     // DEC RCX
     a.dec_reg64(RCX);
     // SUB [RBX+(RCX*8)], 5
-    a.sub_rm64_imm32(mem_ModrmSib1op(RBX, RCX, SCALE_8, 0), 5);
+    a.sub_rm64_imm32(mem_1op(RBX, RCX, SCALE_8, 0), 5);
     // LEAVE
     a.leave();
     // RET
@@ -94,7 +94,7 @@ void test2()
     // setting RAX to 2. Copy value of RAX into 'val'; should = 1.
 
     a.mov_reg_imm64(RAX, 1);
-    a.cmp_rm64_imm8(reg_ModrmSib(RAX), 101);
+    a.cmp_rm64_imm8(reg_1op(RAX), 101);
 
     VectorWriter w2;
     VectorAssembler a2(w2);
@@ -129,7 +129,7 @@ void test3()
     // Code in loop.
     std::size_t s1 = w.size();
     a.mov_reg_imm64(RCX, 2);
-    a.imul_reg_rm64(reg_ModrmSib(RDX, RCX));
+    a.imul_reg_rm64(reg_2op(RDX, RCX));
     a.inc_reg64(RAX);
     a.cmp_rax_imm32(5);
     std::size_t s2 = w.size();
@@ -140,7 +140,7 @@ void test3()
     // Move the value of RDX into val (not quite the simplest way, but good to
     // give MOV a bit of a workout).
     a.mov_reg_imm64(RAX, ptr(&val));
-    a.mov_rm64_reg(mem_ModrmSib2op(RDX, RAX));
+    a.mov_rm64_reg(mem_2op(RDX, RAX));
 
     a.ret();
 
@@ -171,20 +171,20 @@ void test4()
     std:size_t loop_start = w.size();
     // Load fval into the first FP reg.
     a.mov_reg_imm64(RCX, ptr(&fval));
-    a.fld_m80fp(mem_ModrmSib1op(RCX));
+    a.fld_m80fp(mem_1op(RCX));
     // Multiply this value by (integer) 2.
     a.mov_reg_imm64(RCX, ptr(&integer_two));
-    a.fimul_st0_m32int(mem_ModrmSib1op(RCX));
+    a.fimul_st0_m32int(mem_1op(RCX));
     // Divide this value by 0.3
     a.mov_reg_imm64(RCX, ptr(&double_point_3));
-    a.fdiv_st0_m64fp(mem_ModrmSib1op(RCX));
+    a.fdiv_st0_m64fp(mem_1op(RCX));
     // Compare the result to 100.
     a.mov_reg_imm64(RCX, ptr(&double_hundred));
-    a.fld_m80fp(mem_ModrmSib1op(RCX));
+    a.fld_m80fp(mem_1op(RCX));
     a.fcomp_st0_st(1);
     // Put the result back in 'fval'.
     a.mov_reg_imm64(RCX, ptr(&fval));
-    a.fstp_m80fp_st0(mem_ModrmSib1op(RCX));
+    a.fstp_m80fp_st0(mem_1op(RCX));
     std::size_t loop_end = w.size();
 
     // Loop if 'fval' is less than 100.
@@ -229,10 +229,10 @@ void test5()
     // end of args passed in registers >>>>>
     a.mov_reg_imm64(RCX, ptr(printf));
     a.mov_reg_imm32(EAX, 0);
-    a.call_rm64(reg_ModrmSib(RCX));
+    a.call_rm64(reg_1op(RCX));
     // Move the return value in EAX into the 'ret' var.
     a.mov_reg_imm64(RCX, ptr(&ret));
-    a.mov_rm32_reg(mem_ModrmSib2op(EAX, RCX));
+    a.mov_rm32_reg(mem_2op(EAX, RCX));
     // Clear EAX.
     a.mov_reg_imm32(EAX, 0);
 

@@ -71,8 +71,8 @@ struct ModrmSib {
     //     disp      <- Displacement.
     //     scale     <- SCALE_2 or SCALE_3 or SCALE_4.
     //
-    // To create one of these structures without going mad, use 'mem_ModrmSib1/2' or 'reg_ModrmSib',
-    // defined below.
+    // To create one of these structures without going mad, use 'mem_*' or 'reg_*',
+    // functions defined immediately below this struct.
 
     // Returns a register if there is no SIB, no second operand, and r/m is a register.
     // Otherwise returns NOT_A_REGISTER.
@@ -95,13 +95,13 @@ struct ModrmSib {
     Scale scale;
 };
 // For two-operands.
-ModrmSib mem_ModrmSib2op(Register reg, Register base=NOT_A_REGISTER, Register index=NOT_A_REGISTER, Scale scale=SCALE_1, int32_t displacement=0, bool short_displacement=false);
+ModrmSib mem_2op(Register reg, Register base=NOT_A_REGISTER, Register index=NOT_A_REGISTER, Scale scale=SCALE_1, int32_t displacement=0, bool short_displacement=false);
 // For one operand.
-ModrmSib mem_ModrmSib1op(Register base=NOT_A_REGISTER, Register index=NOT_A_REGISTER, Scale scale=SCALE_1, int32_t displacement=0, bool short_displacement=false);
-ModrmSib reg_ModrmSib(Register reg, Register rm);
-ModrmSib reg_ModrmSib(Register rm);
-ModrmSib rip_ModrmSib1op(int32_t offset);
-ModrmSib rip_ModrmSib2op(Register reg, int32_t offset);
+ModrmSib mem_1op(Register base=NOT_A_REGISTER, Register index=NOT_A_REGISTER, Scale scale=SCALE_1, int32_t displacement=0, bool short_displacement=false);
+ModrmSib reg_2op(Register reg, Register rm);
+ModrmSib reg_1op(Register rm);
+ModrmSib rip_1op(int32_t offset);
+ModrmSib rip_2op(Register reg, int32_t offset);
 
 enum Rex {
     REX_PREFIX = 0x40,
@@ -200,8 +200,8 @@ public:
     void dec_rm32(ModrmSib const &modrmsib);
     void dec_rm64(ModrmSib const &modrmsib);
     // Utils:
-    void dec_reg32(Register reg) { dec_rm32(reg_ModrmSib(reg)); }
-    void dec_reg64(Register reg) { dec_rm64(reg_ModrmSib(reg)); }
+    void dec_reg32(Register reg) { dec_rm32(reg_1op(reg)); }
+    void dec_reg64(Register reg) { dec_rm64(reg_1op(reg)); }
 
     // FABS
     void fabs_st0();
@@ -303,8 +303,8 @@ public:
     void inc_rm32(ModrmSib const &modrmsib);
     void inc_rm64(ModrmSib const &modrmsib);
     // Utils:
-    void inc_reg32(Register reg) { inc_rm32(reg_ModrmSib(reg)); }
-    void inc_reg64(Register reg) { inc_rm64(reg_ModrmSib(reg)); }
+    void inc_reg32(Register reg) { inc_rm32(reg_1op(reg)); }
+    void inc_reg64(Register reg) { inc_rm64(reg_1op(reg)); }
 
     // Jcc
     // See http://unixwiz.net/techtips/x86-jumps.html (synonyms excluded).

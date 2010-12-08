@@ -187,7 +187,7 @@ bool Asm::ModrmSib::all_register_operands_have_size(Size size) const
 
 // Creates a ModrmSib where rm is memory.
 namespace Asm {
-ModrmSib mem_ModrmSib2op(Register reg, Register base, Register index, Scale scale, int32_t displacement, bool short_displacement)
+ModrmSib mem_2op(Register reg, Register base, Register index, Scale scale, int32_t displacement, bool short_displacement)
 {
     return ModrmSib(/*rip*/       false,
                     /*rm_reg*/    index == NOT_A_REGISTER ? base : index,
@@ -197,23 +197,23 @@ ModrmSib mem_ModrmSib2op(Register reg, Register base, Register index, Scale scal
                     /*base_reg*/  index == NOT_A_REGISTER ? NOT_A_REGISTER : base,
                     /*scale*/     scale);
 }
-ModrmSib mem_ModrmSib1op(Register base, Register index, Scale scale, int32_t displacement, bool short_displacement)
+ModrmSib mem_1op(Register base, Register index, Scale scale, int32_t displacement, bool short_displacement)
 {
-    return mem_ModrmSib2op(NOT_A_REGISTER, base, index, scale, displacement, short_displacement);
+    return mem_2op(NOT_A_REGISTER, base, index, scale, displacement, short_displacement);
 }
-ModrmSib reg_ModrmSib(Register reg, Register rm)
+ModrmSib reg_2op(Register reg, Register rm)
 {
     return ModrmSib(false, rm, DISP_SIZE_NONE, /*displacement*/ 0, reg);
 }
-ModrmSib reg_ModrmSib(Register rm)
+ModrmSib reg_1op(Register rm)
 {
     return ModrmSib(false, rm);
 }
-ModrmSib rip_ModrmSib1op(int32_t disp)
+ModrmSib rip_1op(int32_t disp)
 {
     return ModrmSib(true, NOT_A_REGISTER, DISP_SIZE_32, disp);
 }
-ModrmSib rip_ModrmSib2op(Register reg, int32_t disp)
+ModrmSib rip_2op(Register reg, int32_t disp)
 {
     return ModrmSib(true, NOT_A_REGISTER, DISP_SIZE_32, disp, reg);
 }
