@@ -304,7 +304,7 @@ template Disp<int32_t> Asm::mkdisp<int32_t>(int32_t i, DispOp op);
 //
 
 //
-// ADC, ADD, SUB
+// ADC, ADD, AND, OR, SUB, XOR
 //
 
 template <class WriterT, uint8_t OPCODE, Size RM_SIZE>
@@ -322,66 +322,96 @@ static void X_rm_reg_(WriterT &w, ModrmSib const &modrmsib)
     template <class WriterT> void Asm::Assembler<WriterT>:: \
     name (ModrmSib const &modrmsib) \
     { X_rm_reg_<WriterT, opcode, rm_size>(w, modrmsib); }
-INST(adc_rm8_reg, 0x10, SIZE_8)
 INST(adc_rm32_reg, 0x11, SIZE_32)
 INST(adc_rm64_reg, 0x11, SIZE_64)
-INST(adc_reg_rm8, 0x12, SIZE_8)
 INST(adc_reg_rm32, 0x13, SIZE_32)
 INST(adc_reg_rm64, 0x13, SIZE_64)
 
-INST(add_rm8_reg, 0x00, SIZE_8)
 INST(add_rm32_reg, 0x01, SIZE_32)
 INST(add_rm64_reg, 0x01, SIZE_64)
-INST(add_reg_rm8, 0x02, SIZE_8)
 INST(add_reg_rm32, 0x03, SIZE_32)
 INST(add_reg_rm64, 0x03, SIZE_64)
 
-INST(sub_rm8_reg, 0x28, SIZE_8)
+INST(and_rm32_reg, 0x21, SIZE_32)
+INST(and_rm64_reg, 0x21, SIZE_64)
+INST(and_reg_rm32, 0x23, SIZE_32)
+INST(and_reg_rm64, 0x23, SIZE_64)
+
+INST(or_rm32_reg, 0x09, SIZE_32)
+INST(or_rm64_reg, 0x09, SIZE_64)
+INST(or_reg_rm32, 0x0B, SIZE_32)
+INST(or_reg_rm64, 0x0B, SIZE_64)
+
 INST(sub_rm32_reg, 0x29, SIZE_32)
 INST(sub_rm64_reg, 0x29, SIZE_64)
-INST(sub_reg_rm8, 0x2A, SIZE_8)
 INST(sub_reg_rm32, 0x2B, SIZE_32)
 INST(sub_reg_rm64, 0x2B, SIZE_64)
+
+INST(xor_rm32_reg, 0x31, SIZE_32)
+INST(xor_rm64_reg, 0x31, SIZE_64)
+INST(xor_reg_rm32, 0x33, SIZE_32)
+INST(xor_reg_rm64, 0x33, SIZE_64)
 #undef INST
 
-template <class WriterT, Size RM_SIZE, uint8_t SIMPLE_OPCODE, uint8_t COMPLEX_OPCODE, Register EXTENSION>
+template <class WriterT, Size RM_SIZE, class Immt, Size IMM_SIZE, uint8_t SIMPLE_OPCODE, uint8_t COMPLEX_OPCODE, Register EXTENSION>
 static void add_rmXX_imm32_(WriterT &w, ModrmSib modrmsib, uint32_t src)
 {
     assert(modrmsib.no_reg_operand() &&
            modrmsib.gp3264_registers_only() &&
            modrmsib.all_register_operands_have_size(RM_SIZE));
 
-    if (modrmsib.simple_register() == EAX) {
+    if (SIMPLE_OPCODE && modrmsib.simple_register() == EAX) {
         assert(RM_SIZE == SIZE_32);
         AB(SIMPLE_OPCODE);
     }
-    else if (modrmsib.simple_register() == RAX) {
+    else if (SIMPLE_OPCODE && modrmsib.simple_register() == RAX) {
         assert(RM_SIZE == SIZE_64);
         AB(REX_PREFIX | REX_W);
         AB(SIMPLE_OPCODE);
     }
     else {
-        modrmsib.reg = EXTENSION;
-
-        if (RM_SIZE == SIZE_64)
-            AB(REX_PREFIX | REX_W);
+        ABIFNZ(compute_rex(modrmsib, RM_SIZE));
         AB(COMPLEX_OPCODE);
+        modrmsib.reg = EXTENSION;
         write_modrmsib_disp(w, modrmsib);
     }
 
     A32(src);
 }
 
-#define INST(name, size, simple_opcode, complex_opcode, extension) \
+#define INST(name, size, immt, imm_size, simple_opcode, complex_opcode, extension) \
     template <class WriterT> void Asm::Assembler<WriterT>:: \
-    name (ModrmSib const &modrmsib, uint32_t src) \
-    { add_rmXX_imm32_<WriterT, size, simple_opcode, complex_opcode, extension>(w, modrmsib, src); }
-INST(adc_rm32_imm32, SIZE_32, 0x15, 0x81, EDX/*2*/)
-INST(adc_rm64_imm32, SIZE_64, 0x15, 0x81, EDX/*2*/)
-INST(add_rm32_imm32, SIZE_32, 0x05, 0x81, EAX/*0*/)
-INST(add_rm64_imm32, SIZE_64, 0x05, 0x81, EAX/*0*/)
-INST(sub_rm32_imm32, SIZE_32, 0x2D, 0x81, EBP/*5*/)
-INST(sub_rm64_imm32, SIZE_64, 0x2D, 0x81, EBP/*5*/)
+    name (ModrmSib const &modrmsib, immt src) \
+    { add_rmXX_imm32_<WriterT, size, immt, imm_size, simple_opcode, complex_opcode, extension>(w, modrmsib, src); }
+INST(adc_rm32_imm8, SIZE_32, uint8_t, SIZE_8, 0, 0x80, EDX/*2*/)
+INST(adc_rm64_imm8, SIZE_64, uint8_t, SIZE_8, 0, 0x80, EDX/*2*/)
+INST(adc_rm32_imm32, SIZE_32, uint32_t, SIZE_32, 0x15, 0x81, EDX/*2*/)
+INST(adc_rm64_imm32, SIZE_64, uint32_t, SIZE_32, 0x15, 0x81, EDX/*2*/)
+
+INST(add_rm32_imm8, SIZE_32, uint8_t, SIZE_8, 0, 0x80, EAX/*0*/)
+INST(add_rm64_imm8, SIZE_64, uint8_t, SIZE_8, 0, 0x80, EAX/*0*/)
+INST(add_rm32_imm32, SIZE_32, uint32_t, SIZE_32, 0x05, 0x81, EAX/*0*/)
+INST(add_rm64_imm32, SIZE_64, uint32_t, SIZE_32, 0x05, 0x81, EAX/*0*/)
+
+INST(and_rm32_imm8, SIZE_32, uint8_t, SIZE_8, 0, 0x80, ESP/*4*/)
+INST(and_rm64_imm8, SIZE_64, uint8_t, SIZE_8, 0, 0x80, ESP/*4*/)
+INST(and_rm32_imm32, SIZE_32, uint32_t, SIZE_32, 0x25, 0x81, ESP/*4*/)
+INST(and_rm64_imm32, SIZE_64, uint32_t, SIZE_32, 0x25, 0x81, ESP/*4*/)
+
+INST(or_rm32_imm8, SIZE_32, uint8_t, SIZE_8, 0, 0x80, ECX/*1*/)
+INST(or_rm64_imm8, SIZE_64, uint8_t, SIZE_8, 0, 0x80, ECX/*1*/)
+INST(or_rm32_imm32, SIZE_32, uint32_t, SIZE_32, 0x0D, 0x81, ECX/*1*/)
+INST(or_rm64_imm32, SIZE_64, uint32_t, SIZE_32, 0x0D, 0x81, ECX/*1*/)
+
+INST(sub_rm32_imm8, SIZE_32, uint8_t, SIZE_8, 0, 0x80, EBX/*5*/)
+INST(sub_rm64_imm8, SIZE_64, uint8_t, SIZE_8, 0, 0x80, EBX/*5*/)
+INST(sub_rm32_imm32, SIZE_32, uint32_t, SIZE_32, 0x2D, 0x81, EBP/*5*/)
+INST(sub_rm64_imm32, SIZE_64, uint32_t, SIZE_32, 0x2D, 0x81, EBP/*5*/)
+
+INST(xor_rm32_imm8, SIZE_32, uint8_t, SIZE_8, 0, 0x80, ESI/*6*/)
+INST(xor_rm64_imm8, SIZE_64, uint8_t, SIZE_8, 0, 0x80, ESI/*6*/)
+INST(xor_rm32_imm32, SIZE_32, uint32_t, SIZE_32, 0x35, 0x81, ESI/*6*/)
+INST(xor_rm64_imm32, SIZE_64, uint32_t, SIZE_32, 0x35, 0x81, ESI/*6*/)
 #undef INST
 
 //
@@ -434,7 +464,6 @@ static void cmp_rmXX_imm_(WriterT &w, Assembler<WriterT> &a, ModrmSib modrmsib, 
     template <class WriterT> void Asm::Assembler<WriterT>:: \
     name (ModrmSib const &modrmsib, immtype imm) \
     { cmp_rmXX_imm_<WriterT, size, rexbyte, opcode, extension, immtype, immtypesize>(w, *this, modrmsib, imm);  }
-INST(cmp_rm8_imm8, 1, SIZE_8, 0x80, EDI/*7*/, uint8_t, SIZE_8)
 INST(cmp_rm32_imm8, 4, SIZE_32, 0x83, EDI/*7*/, uint8_t, SIZE_8)
 INST(cmp_rm64_imm8, 8, SIZE_64, 0x83, EDI/*7*/, uint8_t, SIZE_8)
 INST(cmp_rm32_imm32, 4, SIZE_32, 0x81, EDI/*7*/, uint32_t, SIZE_32)
@@ -670,13 +699,10 @@ static void mul_dxax_rm_(WriterT &w, ModrmSib modrmsib)
     { mul_dxax_rm_<WriterT, opcode, rm_size, extension>(w, modrmsib); }
 INST(idiv_rdx_rax_rm64, 0xF7, SIZE_64, EDI/*7*/)
 INST(idiv_edx_eax_rm32, 0xF7, SIZE_32, EDI/*7*/)
-INST(idiv_ax_al_rm8, 0xF6, SIZE_8, EDI/*7*/)
 INST(imul_rdx_rax_rm64, 0xF7, SIZE_64, EBP/*5*/)
 INST(imul_edx_eax_rm32, 0xF7, SIZE_32, EBP/*5*/)
-INST(imul_ax_al_rm8, 0xF6, SIZE_8, EBP/*5*/)
 INST(mul_rdx_rax_rm64, 0xF7, SIZE_64, ESP/*4*/)
 INST(mul_edx_eax_rm32, 0xF7, SIZE_32, ESP/*4*/)
-INST(mul_ax_al_rm8, 0xF6, SIZE_8, ESP/*4*/)
 #undef INST
 
 //
@@ -700,10 +726,8 @@ static void incdec_(WriterT &w, ModrmSib modrmsib)
     template <class WriterT> void Asm::Assembler<WriterT>:: \
     name(ModrmSib const &modrmsib) \
     { incdec_<WriterT, extension, opcode, rm_size>(w, modrmsib); }
-INST(inc_rm8, EAX/*0*/, 0xFE, SIZE_8)
 INST(inc_rm32, EAX/*0*/, 0xFF, SIZE_32)
 INST(inc_rm64, EAX/*0*/, 0xFF, SIZE_64)
-INST(dec_rm8, ECX/*1*/, 0xFE, SIZE_8)
 INST(dec_rm32, ECX/*1*/, 0xFF, SIZE_32)
 INST(dec_rm64, ECX/*1*/, 0xFF, SIZE_64)
 #undef INST
@@ -827,10 +851,8 @@ static void mov_rm_reg_(WriterT &w, ModrmSib const &modrmsib)
     template <class WriterT> \
     void Asm::Assembler<WriterT>:: name (ModrmSib const &modrmsib) \
     { mov_rm_reg_<WriterT, reversed, rm_size>(w, modrmsib); }
-INST(mov_rm8_reg, 0x88, SIZE_8)
 INST(mov_rm32_reg, 0x89, SIZE_32)
 INST(mov_rm64_reg, 0x89, SIZE_64)
-INST(mov_reg_rm8, 0x8A, SIZE_8)
 INST(mov_reg_rm32, 0x8B, SIZE_32)
 INST(mov_reg_rm64, 0x8B, SIZE_64)
 #undef INST
