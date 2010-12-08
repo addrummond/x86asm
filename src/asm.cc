@@ -353,8 +353,8 @@ INST(xor_reg_rm32, 0x33, SIZE_32)
 INST(xor_reg_rm64, 0x33, SIZE_64)
 #undef INST
 
-template <class WriterT, Size RM_SIZE, class Immt, Size IMM_SIZE, uint8_t SIMPLE_OPCODE, uint8_t COMPLEX_OPCODE, Register EXTENSION>
-static void add_rmXX_imm32_(WriterT &w, ModrmSib modrmsib, Immt src)
+template <class WriterT, Size RM_SIZE, class ImmT, Size IMM_SIZE, uint8_t SIMPLE_OPCODE, uint8_t COMPLEX_OPCODE, Register EXTENSION>
+static void add_rmXX_imm32_(WriterT &w, ModrmSib modrmsib, ImmT src)
 {
     assert(modrmsib.no_reg_operand() &&
            modrmsib.gp3264_registers_only() &&
