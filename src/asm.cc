@@ -376,7 +376,7 @@ static void add_rmXX_imm32_(WriterT &w, ModrmSib modrmsib, Immt src)
         write_modrmsib_disp(w, modrmsib);
     }
 
-    w.a(reinterpret_cast<uint8_t *>(src), IMM_SIZE);
+    w.a(reinterpret_cast<uint8_t *>(&src), IMM_SIZE);
 }
 
 #define INST(name, size, immt, imm_size, simple_opcode, complex_opcode, extension) \
