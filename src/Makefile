@@ -9,11 +9,11 @@ mremap.o: mremap.cc mremap.hh
 asm.o: asm.cc asm.hh mremap.o
 	$(CXX) $(CXXFLAGS) $(INCLUDES) -c asm.cc -o asm.o
 
-test.o: mremap.o asm.o test.cc
-	$(CXX) $(CXXFLAGS) $(INCLUDES) -c test.cc -o test.o
+asm_test.o: mremap.o asm.o asm_test.cc
+	$(CXX) $(CXXFLAGS) $(INCLUDES) -c asm_test.cc -o asm_test.o
 
-test: test.o
-	$(CXX) $(CXXFLAGS) $(LDFLAGS) asm.o mremap.o test.o -o test
+asm_test: asm_test.o
+	$(CXX) $(CXXFLAGS) $(LDFLAGS) asm.o mremap.o asm_test.o -o asm_test
 
 clean:
-	rm test ; rm *.o
+	rm *_test ; rm *.o
