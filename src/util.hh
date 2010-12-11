@@ -2,6 +2,10 @@
 #ifndef UTIL_HH
 #define UTIL_HH
 
+#include <cstddef>
+#include <string>
+#include <cstdlib>
+
 namespace static_assert
 {
     template <bool> struct STATIC_ASSERT_FAILURE;
@@ -14,5 +18,11 @@ namespace static_assert
     typedef ::static_assert::static_assert_test<\
         sizeof(::static_assert::STATIC_ASSERT_FAILURE< (bool)( x ) >)>\
             _static_assert_typedef_
+
+namespace Util {
+
+void hex_dump(uint8_t const *mem, std::size_t length, std::string &o);
+
+}
 
 #endif

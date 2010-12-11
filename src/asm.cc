@@ -1036,16 +1036,7 @@ std::size_t Asm::VectorWriter::size()
 // Designed to be used in tests.
 void Asm::VectorWriter::canonical_hex(std::string &o)
 {
-    o.reserve((length - freebytes) * 2 + // One pair of digits per byte.
-              length - freebytes - 1);   // Spaces separating bytes.
-
-    char tmps[3];
-    for (std::size_t i = 0; i < length - freebytes; ++i) {
-        std::sprintf(tmps, "%02x", static_cast<unsigned>(mem[i]));
-        o.append(tmps);
-        if (i + 1 < length - freebytes)
-            o.push_back(' ');
-    }
+    Util::hex_dump(mem, length - freebytes, o);
 }
 
 void Asm::VectorWriter::debug_print()
