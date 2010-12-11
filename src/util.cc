@@ -24,7 +24,7 @@ void Util::debug_hex_print(uint8_t const *mem, std::size_t length, unsigned line
         std::printf("%02x", static_cast<unsigned>(mem[i]));
         if (lineLength != 0 && i != 0 && (i+1) % lineLength == 0)
             std::printf("\n");
-        else if (dotInterval != 0 && i != 0 && (i+1) % dotInterval == 0)
+        else if (dotInterval != 0 && i != 0 && (i+1) % dotInterval == 0 && i + 1 < length)
             std::printf(" . ");
         else printf(" ");
     }
