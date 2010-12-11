@@ -11,17 +11,17 @@
 using namespace Asm;
 
 // Register codes.
-// (REX, Reg Field).
+// {REX, Reg Field}.
 #define R REX_PREFIX
 #define W (REX_PREFIX | REX_W)
 #define B (REX_PREFIX | REX_B | REX_W)
-static const uint8_t Asm::register_codes[] = {
-    0,0,  0,1,  0,2,  0,3,  0,4,  0,5,  0,6,  0,7, // EAX-EDI
-    W,0,  W,1,  W,2,  W,3,  W,4,  W,5,  W,6,  W,7, // RAX-RDI
-    B,0,  B,1,  B,2,  B,3,  B,4,  B,5,  B,6,  B,7, // R8D-R15D
-    0,0,  0,1,  0,2,  0,3,  0,4,  0,5,  0,6,  0,7, // MM0-MM7
+static const uint8_t Asm::register_codes[][2] = {
+    {0,0}, {0,1}, {0,2}, {0,3}, {0,4}, {0,5}, {0,6}, {0,7}, // EAX-EDI
+    {W,0}, {W,1}, {W,2}, {W,3}, {W,4}, {W,5}, {W,6}, {W,7}, // RAX-RDI
+    {B,0}, {B,1}, {B,2}, {B,3}, {B,4}, {B,5}, {B,6}, {B,7}, // R8D-R15D
+    {0,0}, {0,1}, {0,2}, {0,3}, {0,4}, {0,5}, {0,6}, {0,7}, // MM0-MM7
     // TODO: Check if REX_W is needed for the following:
-    0,0,  0,1,  0,2,  0,3,  0,4,  0,5,  0,6,  0,7, // XMM0-XMM7
+    {0,0}, {0,1}, {0,2}, {0,3}, {0,4}, {0,5}, {0,6}, {0,7}, // XMM0-XMM7
 };
 static char const *Asm::register_names[] = {
     "EAX", "ECX", "EDX", "EBX", "ESP", "EBP", "ESI", "EDI",
@@ -33,8 +33,8 @@ static char const *Asm::register_names[] = {
     "NOT_A_REGISTER"
 };
 char const *Asm::register_name(Register reg) { return register_names[reg]; }
-uint8_t Asm::register_rex(Register reg) { assert(reg < FS); return register_codes[(unsigned)reg * 2]; }
-uint8_t Asm::register_code(Register reg) { assert(reg < FS); return register_codes[((unsigned)reg * 2)+1]; }
+uint8_t Asm::register_rex(Register reg) { assert(reg < FS); return register_codes[reg][0]; }
+uint8_t Asm::register_code(Register reg) { assert(reg < FS); return register_codes[reg][1]; }
 #undef W
 #undef R
 #undef B
