@@ -1041,13 +1041,7 @@ void Asm::VectorWriter::canonical_hex(std::string &o)
 
 void Asm::VectorWriter::debug_print()
 {
-    std::printf("-----\n");
-    for (std::size_t i = 0; i < length - freebytes; ++i) {
-        if (i != 0 && i % 10 == 0)
-            std::printf("\n");
-        std::printf("%02x ", static_cast<unsigned>(mem[i]));
-    }
-    std::printf("\n-----\n\n");
+    Util::debug_hex_print(mem, length - freebytes);
 }
 
 uint8_t *Asm::VectorWriter::get_mem()
