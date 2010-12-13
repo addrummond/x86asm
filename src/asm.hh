@@ -98,6 +98,8 @@ struct ModrmSib {
 ModrmSib mem_2op(Register reg, Register base=NOT_A_REGISTER, Register index=NOT_A_REGISTER, Scale scale=SCALE_1, int32_t displacement=0, bool short_displacement=false);
 // For one operand.
 ModrmSib mem_1op(Register base=NOT_A_REGISTER, Register index=NOT_A_REGISTER, Scale scale=SCALE_1, int32_t displacement=0, bool short_displacement=false);
+ModrmSib mem_2op_short(Register reg, Register base=NOT_A_REGISTER, Register index = NOT_A_REGISTER, Scale scale=SCALE_1, int32_t displacement=0);
+ModrmSib mem_1op_short(Register index = NOT_A_REGISTER, Scale scale=SCALE_1, int32_t displacement=0);
 ModrmSib reg_2op(Register reg, Register rm);
 ModrmSib reg_1op(Register rm);
 ModrmSib rip_1op(int32_t offset);
@@ -466,8 +468,7 @@ private:
 typedef Assembler<VectorWriter> VectorAssembler;
 
 // Utility for converting pointers to uint64_t.
-template <class T>
-uint64_t ptr(T *p);
+#define PTR(p) reinterpret_cast<uint64_t>(p)
 
 }
 

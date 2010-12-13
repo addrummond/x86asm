@@ -6,9 +6,6 @@
 
 using namespace Asm;
 
-template <class T>
-uint64_t Asm::ptr(T *p) { return reinterpret_cast<uint64_t>(p); }
-
 //
 // Tests MOV, INC, DEC, ADD, SUB and IMUL.
 //
@@ -44,13 +41,13 @@ void test1()
     // MOV RAX, RDX {could have used mov_reg_reg here instead}
     a.mov_rm64_reg(reg_2op(RDX, RAX));
     // MOV RBX, [imm64 -- address of 'foo']
-    a.mov_reg_imm64(RBX, ptr(&foo));
+    a.mov_reg_imm64(RBX, PTR(&foo));
     // MOV [RBX], RDX
     a.mov_rm64_reg(mem_2op(RDX, RBX));
     // MOV RAX, [imm64 -- address of 'bar']
-    a.mov_moffs64_rax(ptr(&bar));
+    a.mov_moffs64_rax(PTR(&bar));
     // MOV RBX, [imm64 -- address of (first element of) 'foobar']
-    a.mov_reg_imm64(RBX, ptr(foobar));
+    a.mov_reg_imm64(RBX, PTR(foobar));
     // MOV RCX, 1
     a.mov_reg_imm64(RCX, 1);
     // MOV [RBX+(RCX*8)+8], RDX // {Unnecessarily complex method of accessing second element of foobar}
@@ -103,7 +100,7 @@ void test2()
     a.jnz_st_rel8(static_cast<int8_t>(w2.size()));
     w.a(w2);
 
-    a.mov_moffs64_rax(ptr(&val));
+    a.mov_moffs64_rax(PTR(&val));
     a.ret();
 
     w.debug_print();
@@ -139,7 +136,7 @@ void test3()
 
     // Move the value of RDX into val (not quite the simplest way, but good to
     // give MOV a bit of a workout).
-    a.mov_reg_imm64(RAX, ptr(&val));
+    a.mov_reg_imm64(RAX, PTR(&val));
     a.mov_rm64_reg(mem_2op(RDX, RAX));
 
     a.ret();
@@ -170,20 +167,20 @@ void test4()
     // Code in loop.
     std:size_t loop_start = w.size();
     // Load fval into the first FP reg.
-    a.mov_reg_imm64(RCX, ptr(&fval));
+    a.mov_reg_imm64(RCX, PTR(&fval));
     a.fld_m80fp(mem_1op(RCX));
     // Multiply this value by (integer) 2.
-    a.mov_reg_imm64(RCX, ptr(&integer_two));
+    a.mov_reg_imm64(RCX, PTR(&integer_two));
     a.fimul_st0_m32int(mem_1op(RCX));
     // Divide this value by 0.3
-    a.mov_reg_imm64(RCX, ptr(&double_point_3));
+    a.mov_reg_imm64(RCX, PTR(&double_point_3));
     a.fdiv_st0_m64fp(mem_1op(RCX));
     // Compare the result to 100.
-    a.mov_reg_imm64(RCX, ptr(&double_hundred));
+    a.mov_reg_imm64(RCX, PTR(&double_hundred));
     a.fld_m80fp(mem_1op(RCX));
     a.fcomp_st0_st(1);
     // Put the result back in 'fval'.
-    a.mov_reg_imm64(RCX, ptr(&fval));
+    a.mov_reg_imm64(RCX, PTR(&fval));
     a.fstp_m80fp_st0(mem_1op(RCX));
     std::size_t loop_end = w.size();
 
@@ -223,15 +220,15 @@ void test5()
     a.mov_reg_reg(RBP, RSP);
 
     // <<<<< start of args passed in registers (= all of them).
-    a.mov_reg_imm64(RDI, ptr(fstring));
+    a.mov_reg_imm64(RDI, PTR(fstring));
     a.mov_reg_imm64(RSI, 15);
-    a.mov_reg_imm64(RDX, ptr(astring));
+    a.mov_reg_imm64(RDX, PTR(astring));
     // end of args passed in registers >>>>>
-    a.mov_reg_imm64(RCX, ptr(printf));
+    a.mov_reg_imm64(RCX, PTR(printf));
     a.mov_reg_imm32(EAX, 0);
     a.call_rm64(reg_1op(RCX));
     // Move the return value in EAX into the 'ret' var.
-    a.mov_reg_imm64(RCX, ptr(&ret));
+    a.mov_reg_imm64(RCX, PTR(&ret));
     a.mov_rm32_reg(mem_2op(EAX, RCX));
     // Clear EAX.
     a.mov_reg_imm32(EAX, 0);

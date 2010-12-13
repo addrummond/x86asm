@@ -197,9 +197,17 @@ ModrmSib mem_2op(Register reg, Register base, Register index, Scale scale, int32
                     /*base_reg*/  index == NOT_A_REGISTER ? NOT_A_REGISTER : base,
                     /*scale*/     scale);
 }
+ModrmSib mem_2op_short(Register reg, Register base, Register index, Scale scale, int32_t displacement)
+{
+    return mem_2op(reg, base, index, scale, displacement, true);
+}
 ModrmSib mem_1op(Register base, Register index, Scale scale, int32_t displacement, bool short_displacement)
 {
     return mem_2op(NOT_A_REGISTER, base, index, scale, displacement, short_displacement);
+}
+ModrmSib mem_1op_short(Register base, Register index, Scale scale, int32_t displacement)
+{
+    return mem_2op(NOT_A_REGISTER, base, index, scale, displacement, true);
 }
 ModrmSib reg_2op(Register reg, Register rm)
 {

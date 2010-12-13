@@ -18,14 +18,14 @@ asm_test.o: mremap.o asm.o asm_test.cc
 asm_test: asm_test.o
 	$(CXX) $(CXXFLAGS) $(LDFLAGS) asm.o mremap.o asm_test.o util.o -o asm_test
 
-vm.o: vm.cc vm.hh
+vm.o: vm.cc vm.hh asm.o mremap.o
 	$(CXX) $(CXXFLAGS) $(INCLUDES) -c vm.cc -o vm.o
 
 vm_test.o: vm.o vm_test.cc util.o
 	$(CXX) $(CXXFLAGS) $(INCLUDES) -c vm_test.cc -o vm_test.o
 
 vm_test: vm_test.o
-	$(CXX) $(CXXFLAGS) $(LDFLAGS) vm.o vm_test.o util.o -o vm_test
+	$(CXX) $(CXXFLAGS) $(LDFLAGS) vm.o vm_test.o util.o asm.o mremap.o -o vm_test
 
 clean:
 	rm *_test ; rm *.o
