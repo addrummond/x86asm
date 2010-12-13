@@ -362,7 +362,7 @@ public:
     // JMP
     void jmp_nr_rel8(int8_t disp);
     void jmp_nr_rel32(int32_t disp);
-    void jmp_nr_rm(ModrmSib const &modrmsib);
+    void jmp_nr_rm64(ModrmSib const &modrmsib);
 
     // LEA
     void lea_reg_m(ModrmSib const &modrmsib);
@@ -456,6 +456,8 @@ public:
     typedef void (*voidf)(void);
     uint8_t *get_mem();
     voidf get_exec_func();
+    uint64_t get_start_addr();
+    void *get_start_ptr();
 
 private:
     const std::size_t initial_size;

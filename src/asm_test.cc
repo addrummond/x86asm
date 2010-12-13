@@ -132,7 +132,7 @@ void test3()
     std::size_t s2 = w.size();
     // Using an explicitly constructed Disp<int8_t> to ensure that the size of the JL
     // instruction is subtracted from the (negative) jump offset.
-    a.jl_st_rel8(mkdisp(static_cast<int8_t>(-(s2-s1)), DISP_SUB_ISIZE), BRANCH_HINT_TAKEN);
+    a.jl_st_rel8(mkdisp(static_cast<int8_t>(s1-s2), DISP_SUB_ISIZE), BRANCH_HINT_TAKEN);
 
     // Move the value of RDX into val (not quite the simplest way, but good to
     // give MOV a bit of a workout).
@@ -239,9 +239,73 @@ void test5()
     w.debug_print();
     w.get_exec_func()();
 
-    std::printf("CHARACTERS PRINTED: %i\n", ret);
+    std::printf("TEST 5: CHARACTERS PRINTED: %i\n", ret);
     assert(ret == 76);
-    std::printf("* OK\n");
+    std::printf("* OK\n\n");
+}
+
+//
+// Test a relative call to a function immediately following the CALL instruction.
+//
+void test6()
+{
+    VectorWriter w;
+    VectorAssembler a(w);
+
+    uint64_t val;
+
+    a.push_reg(RBP); // Function preamble.
+    a.mov_reg_reg(RBP, RSP);
+
+    a.call_rel32(2);
+    a.leave(); // 1 byte
+    a.ret();   // 1 byte
+    a.push_rm64(reg_1op(RBP));
+    a.mov_rm64_reg(reg_2op(RSP, RBP));
+    a.sub_rm64_imm8(reg_1op(RBP), 2);
+    a.mov_reg_imm64(RAX, 15);
+    a.mov_moffs64_rax(PTR(&val));
+    a.leave();
+    a.ret();
+
+    w.debug_print();
+    w.get_exec_func()();
+
+    std::printf("TEST 6: VAL = 0x%llx\n", val);
+    assert(val == 15);
+    std::printf("* OK\n\n");
+}
+
+//
+// Test modification of a value higher up the call stack.
+// (The assembly code defines a function, which when called,
+// loops to increment the value of a variable in test7 25
+// times.)
+//
+void test7()
+{
+    uint64_t val = 0;
+
+    VectorWriter w;
+    VectorAssembler a(w);
+
+    a.push_reg(RBP); // Function preamble.
+    a.mov_reg_reg(RBP, RSP);
+    std::size_t b4 = w.size();
+    a.mov_reg_imm64(RCX, PTR(&val));
+    a.inc_rm64(mem_1op(RCX));
+    a.cmp_rm64_imm8(mem_1op(RCX), 25);
+    std::size_t af = w.size();
+    a.jl_st_rel8(mkdisp(static_cast<int8_t>(b4-af), DISP_SUB_ISIZE), BRANCH_HINT_TAKEN);
+    a.leave();
+    a.ret();
+
+    w.debug_print();
+    w.get_exec_func()();
+
+    std::printf("TEST 7: VAL = 0x%llx\n", val);
+    assert(val == 25);
+    std::printf("* OK\n\n");
 }
 
 int main()
@@ -251,6 +315,8 @@ int main()
     test3();
     test4();
     test5();
+    test6();
+    test7();
 
     return 0;
 }

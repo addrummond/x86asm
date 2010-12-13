@@ -430,7 +430,7 @@ template <class WriterT>
 void Asm::Assembler<WriterT>::call_rel32(int32_t disp)
 {
     AB(0xE8);
-    A32(disp);
+    A32(disp + 5); // HACK HACK HACK.
 }
 
 template <class WriterT>
@@ -451,7 +451,7 @@ static void cmp_rmXX_imm_(WriterT &w, Assembler<WriterT> &a, ModrmSib modrmsib, 
 {
     assert(modrmsib.gp3264_registers_only() &&
            modrmsib.no_reg_operand() &&
-           (modrmsib.simple_register() != NOT_A_REGISTER ||
+           (modrmsib.simple_register() == NOT_A_REGISTER ||
             register_byte_size(modrmsib.simple_register()) == BYTE_SIZE));
 
     if (BYTE_SIZE == 8 && ImmTSize == 4 && modrmsib.simple_register() == RAX) {
@@ -793,7 +793,7 @@ template <class WriterT, class IntT, Size IntTSize>
 static void jmp_nr_relXX_(WriterT &w, IntT disp)
 {
     COMPILE_ASSERT(IntTSize == 4 || IntTSize == 1);
-    AB(IntTSize == 1 ? 0xEB : 0xE9);
+    AB(IntTSize == SIZE_8 ? 0xEB : 0xE9);
     w.a(reinterpret_cast<uint8_t *>(&disp), IntTSize);
 }
 
@@ -804,6 +804,16 @@ static void jmp_nr_relXX_(WriterT &w, IntT disp)
 INST(jmp_nr_rel8, int8_t, SIZE_8)
 INST(jmp_nr_rel32, int32_t, SIZE_32)
 #undef INST
+
+template <class WriterT>
+void Asm::Assembler<WriterT>::jmp_nr_rm64(ModrmSib const &modrmsib_)
+{
+    assert(modrmsib_.simple_register() == NOT_A_REGISTER);
+    ModrmSib modrmsib = modrmsib_;
+    modrmsib.reg = ESP/*4*/;
+    AB(0xFF);
+    write_modrmsib_disp(w, modrmsib);
+}
 
 //
 // LEA
@@ -1060,4 +1070,12 @@ uint8_t *Asm::VectorWriter::get_mem()
 Asm::VectorWriter::voidf Asm::VectorWriter::get_exec_func()
 {
     return reinterpret_cast<VectorWriter::voidf>(mem);
+}
+uint64_t Asm::VectorWriter::get_start_addr()
+{
+    return reinterpret_cast<uint64_t>(mem);
+}
+void *Asm::VectorWriter::get_start_ptr()
+{
+    return reinterpret_cast<void *>(mem);
 }
