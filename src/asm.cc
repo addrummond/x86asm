@@ -3,7 +3,6 @@
 #include <mremap.hh>
 #include <cassert>
 #include <iterator>
-#include <iostream>
 #include <cstdio>
 #include <cstring>
 #include <sys/mman.h>
@@ -138,15 +137,16 @@ static RawModrmSib raw_modrmsib(ModrmSib const &modrmsib)
         else if (modrmsib.scale == SCALE_8)
             sib_mod = 3;
         // Set rm (index).
-        if (modrmsib.rm_reg == NOT_A_REGISTER)
+        if (modrmsib.base_reg == NOT_A_REGISTER)
             sib_rm = 4;
         else {
             assert(is_gp3264_register(modrmsib.rm_reg) && modrmsib.rm_reg != RSP);
             sib_rm = register_code(modrmsib.rm_reg);
         }
         // Set reg (base).
-        assert(is_gp3264_register(modrmsib.base_reg));
-        sib_reg = register_code(modrmsib.base_reg);
+        Register base_reg = (modrmsib.base_reg == NOT_A_REGISTER ? modrmsib.rm_reg : modrmsib.base_reg);
+        assert(is_gp3264_register(base_reg));
+        sib_reg = register_code(base_reg);
 
         // Note that reg/rm are in the opposite order as compared to the real modrm byte.
         r.sib = raw_modrm(sib_mod, sib_reg, sib_rm);
