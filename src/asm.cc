@@ -69,6 +69,11 @@ static bool is_gp3264_register(Register reg)
     return (reg >= EAX && reg <= EDI) || (reg >= RAX && reg <= RDI) || (reg >= R8D && reg <= R15D);
 }
 
+static bool requires_sib(ModrmSib const &modrmsib)
+{
+    return !(modrmsib.disp_size == DISP_SIZE_NONE || modrmsib.scale == SCALE_1);
+}
+
 struct RawModrmSib {
     uint8_t modrm;
     uint8_t sib; // Set to 0 if none, since 0 is not a valid SIB.
@@ -123,7 +128,7 @@ static RawModrmSib raw_modrmsib(ModrmSib const &modrmsib)
     r.modrm = raw_modrm(mod, rm, reg);
 
     // Add SIB if required.
-    if (! (mod != 3 && rm == 4)) {
+    if (! requires_sib(modrmsib)) {//(mod == 3 || rm != 4) {
         r.sib = 0;
     }
     else {
@@ -250,8 +255,21 @@ static uint8_t compute_rex(ModrmSib const &modrmsib, Size size) // Returns 0 if 
     uint8_t rex = 0;
     if (size == SIZE_64)
         rex |= REX_W;
-    if (modrmsib.reg >= R8D && modrmsib.reg <= R15D)
-        rex |= REX_B;
+
+    if (requires_sib(modrmsib)) {//modrmsib.disp_size == DISP_SIZE_NONE || modrmsib.scale == SCALE_1) {
+        // No SIB.
+        if (modrmsib.rm_reg >= R8D && modrmsib.rm_reg <= R15D)
+            rex |= REX_B;
+        if (modrmsib.reg >= R8D && modrmsib.reg <= R15D)
+            rex |= REX_R;
+    }
+    else {
+        if (modrmsib.rm_reg >= R8D && modrmsib.rm_reg <= R15D)
+            rex |= REX_X;
+        if (modrmsib.reg >= R8D && modrmsib.reg <= R15D)
+            rex |= REX_R;
+    }
+
     if (rex != 0)
         rex |= REX_PREFIX;
     return rex;
