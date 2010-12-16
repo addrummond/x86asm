@@ -98,12 +98,12 @@ struct ModrmSib {
 ModrmSib mem_2op(Register reg, Register base=NOT_A_REGISTER, Register index=NOT_A_REGISTER, Scale scale=SCALE_1, int32_t displacement=0, bool short_displacement=false);
 // For one operand.
 ModrmSib mem_1op(Register base=NOT_A_REGISTER, Register index=NOT_A_REGISTER, Scale scale=SCALE_1, int32_t displacement=0, bool short_displacement=false);
-ModrmSib mem_2op_short(Register reg, Register base=NOT_A_REGISTER, Register index = NOT_A_REGISTER, Scale scale=SCALE_1, int32_t displacement=0);
-ModrmSib mem_1op_short(Register index = NOT_A_REGISTER, Scale scale=SCALE_1, int32_t displacement=0);
+ModrmSib mem_2op_short(Register reg, Register base=NOT_A_REGISTER, Register index=NOT_A_REGISTER, Scale scale=SCALE_1, int32_t displacement=0);
+ModrmSib mem_1op_short(Register index=NOT_A_REGISTER, Scale scale=SCALE_1, int32_t displacement=0);
 ModrmSib reg_2op(Register reg, Register rm);
 ModrmSib reg_1op(Register rm);
-ModrmSib rip_1op(int32_t offset);
-ModrmSib rip_2op(Register reg, int32_t offset);
+ModrmSib rip_1op(Register reg, int32_t offset=0);
+ModrmSib rip_2op(Register reg2, Register reg1, int32_t offset=0);
 
 enum Rex {
     REX_PREFIX = 0x40,
@@ -388,6 +388,9 @@ public:
     // MUL
     void mul_edx_eax_rm32(ModrmSib const &modrmsib);
     void mul_rdx_rax_rm64(ModrmSib const &modrmsib);
+
+    // NOP
+    void nop();
 
     // OR
     void or_rm32_reg(ModrmSib const &modrmsib);

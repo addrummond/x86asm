@@ -82,15 +82,15 @@ static RawModrmSib raw_modrmsib(ModrmSib const &modrmsib)
 
     // The special case of RIP.
     if (modrmsib.rip) {
-        mod = 0;
-        rm = 5;
-        reg = 0;
         assert(modrmsib.disp_size == DISP_SIZE_32 &&
-               modrmsib.rm_reg == NOT_A_REGISTER &&
+               modrmsib.rm_reg != ESP && modrmsib.rm_reg != EBP &&
                modrmsib.scale == SCALE_1 &&
                modrmsib.base_reg == NOT_A_REGISTER);
-        r.modrm = raw_modrm(mod, rm, modrmsib.reg != NOT_A_REGISTER ? register_code(modrmsib.reg) : 0);
+        r.modrm = raw_modrm(0,
+                            modrmsib.rm_reg != NOT_A_REGISTER ? register_code(modrmsib.rm_reg) : 5,
+                            modrmsib.reg != NOT_A_REGISTER ? register_code(modrmsib.reg) : 0);
         r.sib = 0;
+//        std::printf("\n\n%x\n\n", (int)(r.modrm));
         return r;
     }
 
@@ -145,7 +145,7 @@ static RawModrmSib raw_modrmsib(ModrmSib const &modrmsib)
         }
         // Set reg (base).
         Register base_reg = (modrmsib.base_reg == NOT_A_REGISTER ? modrmsib.rm_reg : modrmsib.base_reg);
-        assert(is_gp3264_register(base_reg));
+        assert(is_gp3264_register(base_reg) && register_byte_size(base_reg) == 8);
         sib_reg = register_code(base_reg);
 
         // Note that reg/rm are in the opposite order as compared to the real modrm byte.
@@ -217,13 +217,13 @@ ModrmSib reg_1op(Register rm)
 {
     return ModrmSib(false, rm);
 }
-ModrmSib rip_1op(int32_t disp)
+ModrmSib rip_1op(Register reg1, int32_t disp)
 {
-    return ModrmSib(true, NOT_A_REGISTER, DISP_SIZE_32, disp);
+    return ModrmSib(true, reg1, DISP_SIZE_32, disp);
 }
-ModrmSib rip_2op(Register reg, int32_t disp)
+ModrmSib rip_2op(Register reg2, Register reg1, int32_t disp)
 {
-    return ModrmSib(true, NOT_A_REGISTER, DISP_SIZE_32, disp, reg);
+    return ModrmSib(true, reg1, DISP_SIZE_32, disp, reg2);
 }
 }
 
@@ -900,6 +900,16 @@ static void mov_reg_immX_(Assembler<WriterT> &a, WriterT &w, Register reg, ImmT 
 INST(mov_reg_imm32, uint32_t, SIZE_32)
 INST(mov_reg_imm64, uint64_t, SIZE_64)
 #undef INST
+
+//
+// NOP
+//
+
+template <class WriterT>
+void Asm::Assembler<WriterT>::nop()
+{
+    AB(0x90);
+}
 
 //
 // POP, PUSH
