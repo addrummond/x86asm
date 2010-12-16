@@ -164,9 +164,9 @@ Register Asm::ModrmSib::simple_register() const
         return NOT_A_REGISTER;
 }
 
-bool Asm::ModrmSib::no_reg_operand() const
+bool Asm::ModrmSib::has_reg_operand() const
 {
-    return reg == NOT_A_REGISTER;
+    return reg != NOT_A_REGISTER;
 }
 
 bool Asm::ModrmSib::simple_memory() const
@@ -365,7 +365,7 @@ INST(xor_reg_rm64, 0x33, SIZE_64)
 template <class WriterT, Size RM_SIZE, class ImmT, Size IMM_SIZE, uint8_t SIMPLE_OPCODE, uint8_t COMPLEX_OPCODE, Register EXTENSION>
 static void add_rmXX_imm32_(WriterT &w, ModrmSib modrmsib, ImmT src)
 {
-    assert(modrmsib.no_reg_operand() &&
+    assert((! modrmsib.has_reg_operand()) &&
            modrmsib.gp3264_registers_only() &&
            modrmsib.all_register_operands_have_size(RM_SIZE));
 
@@ -437,7 +437,7 @@ void Asm::Assembler<WriterT>::call_rel32(int32_t disp)
 template <class WriterT>
 void Asm::Assembler<WriterT>::call_rm64(ModrmSib modrmsib)
 {
-    assert(modrmsib.no_reg_operand());
+    assert(! modrmsib.has_reg_operand());
     AB(0xFF);
     modrmsib.reg = EDX/*2*/;
     write_modrmsib_disp(w, modrmsib);
@@ -451,7 +451,7 @@ template <class WriterT, unsigned BYTE_SIZE, Size RM_SIZE, uint8_t OPCODE, Regis
 static void cmp_rmXX_imm_(WriterT &w, Assembler<WriterT> &a, ModrmSib modrmsib, ImmT imm)
 {
     assert(modrmsib.gp3264_registers_only() &&
-           modrmsib.no_reg_operand() &&
+           (! modrmsib.has_reg_operand()) &&
            (modrmsib.simple_register() == NOT_A_REGISTER ||
             register_byte_size(modrmsib.simple_register()) == BYTE_SIZE));
 
@@ -692,7 +692,7 @@ INST(imul_reg_rm64, SIZE_64)
 template <class WriterT, uint8_t OPCODE, Size RM_SIZE, Register EXTENSION>
 static void mul_dxax_rm_(WriterT &w, ModrmSib modrmsib)
 {
-    assert(modrmsib.no_reg_operand() &&
+    assert((! modrmsib.has_reg_operand()) &&
            modrmsib.gp3264_registers_only() &&
            modrmsib.all_register_operands_have_size(RM_SIZE));
 
@@ -721,7 +721,7 @@ INST(mul_edx_eax_rm32, 0xF7, SIZE_32, ESP/*4*/)
 template <class WriterT, Register EXTENSION, uint8_t OPCODE, Size RM_SIZE>
 static void incdec_(WriterT &w, ModrmSib modrmsib)
 {
-    assert(modrmsib.no_reg_operand() &&
+    assert((! modrmsib.has_reg_operand()) &&
            modrmsib.gp3264_registers_only() &&
            modrmsib.all_register_operands_have_size(RM_SIZE));
 
@@ -809,7 +809,7 @@ INST(jmp_nr_rel32, int32_t, SIZE_32)
 template <class WriterT>
 void Asm::Assembler<WriterT>::jmp_nr_rm64(ModrmSib const &modrmsib_)
 {
-    assert(modrmsib_.simple_register() == NOT_A_REGISTER);
+    assert(! modrmsib_.has_reg_operand());
     ModrmSib modrmsib = modrmsib_;
     modrmsib.reg = ESP/*4*/;
     AB(0xFF);
@@ -822,7 +822,7 @@ void Asm::Assembler<WriterT>::jmp_nr_rm64(ModrmSib const &modrmsib_)
 template <class WriterT>
 void Asm::Assembler<WriterT>::lea_reg_m(ModrmSib const &modrmsib)
 {
-    assert(! modrmsib.no_reg_operand());
+    assert(modrmsib.has_reg_operand());
     ABIFNZ(compute_rex(modrmsib, (Size)register_byte_size(modrmsib.reg)));
     AB(0x8D);
     write_modrmsib_disp(w, modrmsib);
@@ -933,7 +933,7 @@ void Asm::Assembler<WriterT>::push_reg64(Register reg)
 template <class WriterT, Size RM_SIZE, uint8_t OPCODE>
 static void push_rmX_(Assembler<WriterT> &a, WriterT &w, ModrmSib modrmsib)
 {
-    assert(modrmsib.no_reg_operand());
+    assert(! modrmsib.has_reg_operand());
 
     if (has_additive_code_64(modrmsib.simple_register())) {
         if (OPCODE == 0xFF)

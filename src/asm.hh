@@ -80,7 +80,7 @@ struct ModrmSib {
     // Return true if all register operands are GP.
     bool gp3264_registers_only() const;
     // Returns true if there is no additional reg operand.
-    bool no_reg_operand() const;
+    bool has_reg_operand() const;
     // Checks that all register operands in a ModRM byte have a given (byte) size.
     bool all_register_operands_have_size(Size size) const;
     // True if it specifies a memory location only with no additional register operand.
