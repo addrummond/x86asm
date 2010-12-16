@@ -82,7 +82,7 @@ static RawModrmSib raw_modrmsib(ModrmSib const &modrmsib)
 
     // The special case of RIP.
     if (modrmsib.rip) {
-        assert(modrmsib.disp_size == DISP_SIZE_32 &&
+        assert((modrmsib.disp_size == DISP_SIZE_32 || modrmsib.disp_size == DISP_SIZE_NONE) &&
                modrmsib.rm_reg != ESP && modrmsib.rm_reg != EBP &&
                modrmsib.scale == SCALE_1 &&
                modrmsib.base_reg == NOT_A_REGISTER);
@@ -90,6 +90,7 @@ static RawModrmSib raw_modrmsib(ModrmSib const &modrmsib)
                             modrmsib.rm_reg != NOT_A_REGISTER ? register_code(modrmsib.rm_reg) : 5,
                             modrmsib.reg != NOT_A_REGISTER ? register_code(modrmsib.reg) : 0);
         r.sib = 0;
+        r.has_disp = modrmsib.disp_size != DISP_SIZE_NONE;
 //        std::printf("\n\n%x\n\n", (int)(r.modrm));
         return r;
     }
@@ -219,11 +220,11 @@ ModrmSib reg_1op(Register rm)
 }
 ModrmSib rip_1op(Register reg1, int32_t disp)
 {
-    return ModrmSib(true, reg1, DISP_SIZE_32, disp);
+    return ModrmSib(true, reg1, disp == 0 ? DISP_SIZE_NONE : DISP_SIZE_32, disp);
 }
 ModrmSib rip_2op(Register reg2, Register reg1, int32_t disp)
 {
-    return ModrmSib(true, reg1, DISP_SIZE_32, disp, reg2);
+    return ModrmSib(true, reg1, disp == 0 ? DISP_SIZE_NONE : DISP_SIZE_32, disp, reg2);
 }
 }
 
@@ -822,7 +823,7 @@ template <class WriterT>
 void Asm::Assembler<WriterT>::lea_reg_m(ModrmSib const &modrmsib)
 {
     assert(! modrmsib.no_reg_operand());
-    ABIFNZ(compute_rex(modrmsib, (Size)0));
+    ABIFNZ(compute_rex(modrmsib, (Size)register_byte_size(modrmsib.reg)));
     AB(0x8D);
     write_modrmsib_disp(w, modrmsib);
 }
