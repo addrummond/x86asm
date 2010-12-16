@@ -404,12 +404,12 @@ public:
 
     // POP
     void pop_rm64(ModrmSib const &modrmsib);
-    void pop_reg(Register reg);
+    void pop_reg64(Register reg);
 
     // PUSH
     void push_rm16(ModrmSib const &modrmsib);
     void push_rm64(ModrmSib const &modrmsib);
-    void push_reg(Register reg);
+    void push_reg64(Register reg);
     void push_imm8(uint8_t imm);
     void push_imm32(uint32_t imm);
 

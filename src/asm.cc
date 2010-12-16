@@ -917,14 +917,14 @@ void Asm::Assembler<WriterT>::nop()
 //
 
 template <class WriterT>
-void Asm::Assembler<WriterT>::pop_reg(Register reg)
+void Asm::Assembler<WriterT>::pop_reg64(Register reg)
 {
     assert(has_additive_code_64(reg));
     AB(0x58 + register_code(reg));
 }
 
 template <class WriterT>
-void Asm::Assembler<WriterT>::push_reg(Register reg)
+void Asm::Assembler<WriterT>::push_reg64(Register reg)
 {
     assert(has_additive_code_64(reg));
     AB(0x50 + register_code(reg));
@@ -937,9 +937,9 @@ static void push_rmX_(Assembler<WriterT> &a, WriterT &w, ModrmSib modrmsib)
 
     if (has_additive_code_64(modrmsib.simple_register())) {
         if (OPCODE == 0xFF)
-            a.push_reg(modrmsib.simple_register());
+            a.push_reg64(modrmsib.simple_register());
         else if (OPCODE == 0x8F)
-            a.pop_reg(modrmsib.simple_register());
+            a.pop_reg64(modrmsib.simple_register());
     }
     else {
         AB(OPCODE);

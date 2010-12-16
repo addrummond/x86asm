@@ -24,7 +24,7 @@ void test1()
     // void function (saving the base pointer and then restoring it via LEAVE).
 
     // PUSH RBP
-    a.push_reg(RBP);
+    a.push_reg64(RBP);
     // MOV RBP, RSP
     a.mov_reg_reg(RBP, RSP);
     // MOV RAX, 2
@@ -216,7 +216,7 @@ void test5()
     VectorWriter w;
     VectorAssembler a(w);
 
-    a.push_reg(RBP); // Function preamble (unnecessary since this func doesn't take any args).
+    a.push_reg64(RBP); // Function preamble (unnecessary since this func doesn't take any args).
     a.mov_reg_reg(RBP, RSP);
 
     // <<<<< start of args passed in registers (= all of them).
@@ -254,7 +254,7 @@ void test6()
 
     uint64_t val;
 
-    a.push_reg(RBP); // Function preamble.
+    a.push_reg64(RBP); // Function preamble.
     a.mov_reg_reg(RBP, RSP);
 
     a.call_rel32(2);
@@ -289,7 +289,7 @@ void test7()
     VectorWriter w;
     VectorAssembler a(w);
 
-    a.push_reg(RBP); // Function preamble.
+    a.push_reg64(RBP); // Function preamble.
     a.mov_reg_reg(RBP, RSP);
     std::size_t b4 = w.size();
     a.mov_reg_imm64(RCX, PTR(&val));
