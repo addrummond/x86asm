@@ -16,6 +16,12 @@ enum Register {
     MM0, MM1, MM2, MM3, MM4, MM5, MM6, MM7,
     XMM0, XMM1, XMM2, XMM3, XMM4, XMM5, XMM6, XMM7,
 
+    // For the most part, the assembler doesn't support fiddling around
+    // with 8-bit registers, but there are one or two exceptions
+    // (e.g. MOV). There's no support at all for doing stuff with the
+    // 16-bit registers.
+    AL, CL, DL, BL, AH, CH, DH, BH,
+
     FS,GS, // Other segment registers are ignored in 64-bit mode.
 
     NOT_A_REGISTER
@@ -77,8 +83,11 @@ struct ModrmSib {
     // Returns a register if there is no SIB, no second operand, and r/m is a register.
     // Otherwise returns NOT_A_REGISTER.
     Register simple_register() const;
-    // Return true if all register operands are GP.
+    // Return true if all register operands are GP 32 or 64-bit registers.
     bool gp3264_registers_only() const;
+    // Return true if all register operands are 8-bit GP registers.
+    bool gp8_registers_only() const;
+    bool gp_registers_only() const;
     // Returns true if there is no additional reg operand.
     bool has_reg_operand() const;
     // Checks that all register operands in a ModRM byte have a given (byte) size.
@@ -119,7 +128,7 @@ enum BranchHint {
     BRANCH_HINT_NOT_TAKEN
 };
 
-unsigned const NUMBER_OF_REGISTERS = 40;
+unsigned const NUMBER_OF_REGISTERS = 48;
 uint8_t register_code(Register reg);
 uint8_t register_rex(Register reg);
 unsigned register_byte_size(Register reg);
@@ -377,8 +386,10 @@ public:
                                                    // and because the modrm byte can be
                                                    // computed using simpler code in this
                                                    // case.
+    void mov_rm8_reg(ModrmSib const &modrmsib);
     void mov_rm32_reg(ModrmSib const &modrmsib);
     void mov_rm64_reg(ModrmSib const &modrmsib);
+    void mov_reg_rm8(ModrmSib const &modrmsib);
     void mov_reg_rm32(ModrmSib const &modrmsib);
     void mov_reg_rm64(ModrmSib const &modrmsib);
     void mov_reg_imm32(Register reg, uint32_t imm);

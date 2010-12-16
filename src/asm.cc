@@ -21,6 +21,7 @@ static const uint8_t Asm::register_codes[][2] = {
     {0,0}, {0,1}, {0,2}, {0,3}, {0,4}, {0,5}, {0,6}, {0,7}, // MM0-MM7
     // TODO: Check if REX_W is needed for the following:
     {0,0}, {0,1}, {0,2}, {0,3}, {0,4}, {0,5}, {0,6}, {0,7}, // XMM0-XMM7
+    {0,0}, {0,1}, {0,2}, {0,3}, {0,4}, {0,5}, {0,6}, {0,7}  // AL-BH
 };
 static char const *Asm::register_names[] = {
     "EAX", "ECX", "EDX", "EBX", "ESP", "EBP", "ESI", "EDI",
@@ -28,6 +29,7 @@ static char const *Asm::register_names[] = {
     "R8D", "R9D", "R10D", "R11D", "R12D", "R13D", "R14D", "R15D",
     "MM0", "MM1", "MM2", "MM4", "MM5", "MM6", "MM7",
     "XMM0", "XMM1", "XMM2", "XMM3", "XMM4", "XMM5", "XMM6", "XMM7",
+    "AL", "CL", "DL", "BL", "AH", "CH", "DH", "BH"
     "FS", "GS",
     "NOT_A_REGISTER"
 };
@@ -54,8 +56,9 @@ static unsigned Asm::register_byte_sizes[] = {
     8, 8, 8, 8, 8, 8, 8, 8, // R8D-R15D
     8, 8, 8, 8, 8, 8, 8, 8, // MM0-MM7
     8, 8, 8, 8, 8, 8, 8, 8, // XMM0-XMM7
+    1, 1, 1, 1, 1, 1, 1, 1  // AL-BH
 };
-unsigned Asm::register_byte_size(Register reg) { assert(reg <= XMM7); return register_byte_sizes[reg]; }
+unsigned Asm::register_byte_size(Register reg) { assert(reg <= BH); return register_byte_sizes[reg]; }
 
 static uint8_t raw_modrm(uint8_t mod, uint8_t rm, uint8_t reg)
 {
@@ -63,10 +66,14 @@ static uint8_t raw_modrm(uint8_t mod, uint8_t rm, uint8_t reg)
     return (mod << 6) | (reg << 3) | rm;
 }
 
-// Note that this excludes the 16-bit registers.
+// Note that this excludes the 16-bit registers and 8-bit registers.
 static bool is_gp3264_register(Register reg)
 {
     return (reg >= EAX && reg <= EDI) || (reg >= RAX && reg <= RDI) || (reg >= R8D && reg <= R15D);
+}
+static bool is_gp8_register(Register reg)
+{
+    return (reg >= AL && reg <= BH);
 }
 
 static bool requires_sib(ModrmSib const &modrmsib)
@@ -183,6 +190,18 @@ bool Asm::ModrmSib::gp3264_registers_only() const
 {
     return (rm_reg == NOT_A_REGISTER || (rm_reg >= EAX && rm_reg <= R15D)) &&
            (reg == NOT_A_REGISTER || (reg >= EAX && reg <= R15D));
+}
+
+bool Asm::ModrmSib::gp8_registers_only() const
+{
+    return (rm_reg == NOT_A_REGISTER || (rm_reg >= AL && rm_reg <= BH)) &&
+           (reg == NOT_A_REGISTER || (reg >= AL && reg <= BH));
+}
+
+bool Asm::ModrmSib::gp_registers_only() const
+{
+    return (rm_reg == NOT_A_REGISTER || (rm_reg >= EAX && rm_reg <= R15D) || (rm_reg >= AL && rm_reg <= BH)) &&
+           (reg == NOT_A_REGISTER || (reg >= EAX && reg <= R15D) || (reg >= AL && reg <= BH));
 }
 
 bool Asm::ModrmSib::all_register_operands_have_size(Size size) const
@@ -876,8 +895,8 @@ void Asm::Assembler<WriterT>::mov_reg_reg(Register reg_dest, Register reg_src)
 template <class WriterT, uint8_t OPCODE, Size RM_SIZE>
 static void mov_rm_reg_(WriterT &w, ModrmSib const &modrmsib)
 {
-    assert(modrmsib.gp3264_registers_only() &&
-           modrmsib.all_register_operands_have_size(RM_SIZE));
+    assert(modrmsib.gp_registers_only() /*&&
+                                          modrmsib.all_register_operands_have_size(RM_SIZE)*/);
 
     ABIFNZ(compute_rex(modrmsib, RM_SIZE));
     AB(OPCODE);
@@ -888,6 +907,8 @@ static void mov_rm_reg_(WriterT &w, ModrmSib const &modrmsib)
     template <class WriterT> \
     void Asm::Assembler<WriterT>:: name (ModrmSib const &modrmsib) \
     { mov_rm_reg_<WriterT, reversed, rm_size>(w, modrmsib); }
+INST(mov_rm8_reg, 0x88, SIZE_8)
+INST(mov_reg_rm8, 0x8A, SIZE_8)
 INST(mov_rm32_reg, 0x89, SIZE_32)
 INST(mov_rm64_reg, 0x89, SIZE_64)
 INST(mov_reg_rm32, 0x8B, SIZE_32)
