@@ -1,7 +1,7 @@
 #include <asm.hh>
 #include <util.hh>
 #include <mremap.hh>
-#include <cassert>
+#include <myassert.hh>
 #include <iterator>
 #include <cstdio>
 #include <cstring>
