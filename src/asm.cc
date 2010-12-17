@@ -1046,8 +1046,21 @@ Asm::VectorWriter::VectorWriter(std::size_t initial_size_)
 
 }
 
+Asm::VectorWriter::VectorWriter(Asm::VectorWriter &vw)
+    : initial_size(vw.length),
+      freebytes(vw.length),
+      length(vw.length)
+{
+    vw.mem = NULL;
+}
+
 Asm::VectorWriter::~VectorWriter() {
     munmap(mem, length);
+}
+
+void Asm::VectorWriter::clear()
+{
+    freebytes = length;
 }
 
 void Asm::VectorWriter::a(const uint8_t *buf, std::size_t buflength)

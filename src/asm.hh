@@ -97,10 +97,10 @@ struct ModrmSib {
 
     bool rip;
     Register rm_reg;
-    Register reg;
-    Register base_reg;
     DispSize disp_size;
     int32_t disp;
+    Register reg;
+    Register base_reg;
     Scale scale;
 };
 // For two-operands.
@@ -456,6 +456,7 @@ public:
     static const std::size_t ROOM_AHEAD = 20;
 
     VectorWriter(std::size_t initial_size = 20);
+    VectorWriter(VectorWriter &vw);
     ~VectorWriter();
 
     void a(const uint8_t *buf, std::size_t length);
@@ -473,12 +474,13 @@ public:
     uint64_t get_start_addr();
     void *get_start_ptr();
 
-private:
-    const std::size_t initial_size;
+    void clear();
 
-    uint8_t *mem;
-    std::size_t length;
+private:
+    const std::size_t initial_size
     std::size_t freebytes;
+    std::size_t length;
+    uint8_t *mem;
 };
 
 typedef Assembler<VectorWriter> VectorAssembler;
