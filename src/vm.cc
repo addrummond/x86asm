@@ -453,7 +453,7 @@ uint64_t main_loop_(std::vector<uint8_t> &instructions, std::size_t start, const
     
     uint64_t address_of_main_label;
 
-    uint64_t saved_registers[20];
+    uint64_t saved_registers[16];
     bool registers_are_saved;
 
     uint64_t addr;
@@ -524,16 +524,16 @@ main_label:
             emit_exit(*a, base_pointer_for_main_loop, stack_pointer_for_main_loop, i[1]);
         }
         else if (*i == OP_INCRW) {
-            emit_incrw(*a, *(i + 1));
+            emit_incrw(*a, i[1]);
         }
         else if (*i == OP_LDI16) {
-            emit_ldi(*a, *(i + 1), *(i + 2) + (*(i + 3) << 8));
+            emit_ldi(*a, i[1], i[2] + (i[3] << 8));
         }
         else if (*i == OP_IADD) {
-            emit_add(*a, *(i + 1), *(i + 2));
+            emit_add(*a, i[1], i[2]);
         }
         else if (*i == OP_DEBUG_PRINTREG) {
-            emit_debug_printreg(*a, *(i + 1));
+            emit_debug_printreg(*a, i[1]);
         }
         else assert(false);
 
