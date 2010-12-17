@@ -828,16 +828,17 @@ INST2(js, 0x78) INST2(jz, 0x74)
 //
 
 template <class WriterT, class IntT, Size IntTSize>
-static void jmp_nr_relXX_(WriterT &w, IntT disp)
+static void jmp_nr_relXX_(WriterT &w, Disp<IntT> disp)
 {
     COMPILE_ASSERT(IntTSize == 4 || IntTSize == 1);
     AB(IntTSize == SIZE_8 ? 0xEB : 0xE9);
-    w.a(reinterpret_cast<uint8_t *>(&disp), IntTSize);
+    IntT d = disp.get(1 + IntTSize);
+    w.a(reinterpret_cast<uint8_t *>(&d), IntTSize);
 }
 
 #define INST(name, int_t, int_t_size) \
     template <class WriterT> void Asm::Assembler<WriterT>:: \
-    name(int_t disp) \
+    name(Disp<int_t> disp)                                  \
     { jmp_nr_relXX_<WriterT, int_t, int_t_size>(w, disp); }
 INST(jmp_nr_rel8, int8_t, SIZE_8)
 INST(jmp_nr_rel32, int32_t, SIZE_32)

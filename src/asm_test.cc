@@ -308,6 +308,68 @@ void test7()
     std::printf("* OK\n\n");
 }
 
+//
+// Test jumping to labels.
+//
+void test8()
+{
+    uint64_t after_label_address;
+    int i = 0;
+    VectorWriter alaw;
+    VectorAssembler alaa(alaw);
+    VectorWriter w;
+    VectorAssembler a(w);
+    uint64_t addr;
+    int32_t rel;
+
+    goto getaddr;
+
+jump:
+    addr = w.get_start_addr() + w.size();
+    rel = (int32_t)(after_label_address - addr);
+    std::printf("REL: %i (%lli[%lli], %lli)\n", rel, after_label_address,
+#ifdef __GNUC__
+    (unsigned long long)&&after,
+#else
+    0,
+#endif
+    addr);
+#ifdef __GNUC__
+    assert(after_label_address == reinterpret_cast<uint64_t>(&&after));
+#endif
+    a.jmp_nr_rel32(mkdisp<int32_t>(rel, DISP_SUB_ISIZE));
+    w.get_exec_func()();
+
+getaddr:
+    assert(i == 0);
+    // Get the address of the next instruction by creating a function,
+    // calling it, and storing the return address that gets pushed onto
+    // the stack.
+    alaa.push_reg64(RBP); // Function preamble.
+    alaa.mov_reg_reg(RBP, RSP);
+
+    alaa.mov_reg_imm64(RCX, PTR(&after_label_address));
+    alaa.mov_reg_rm64(mem_2op(RDX, RBP, NOT_A_REGISTER, SCALE_1, 8));
+    alaa.mov_rm64_reg(mem_2op(RDX, RCX));
+
+    alaa.leave();
+    alaa.ret();
+    alaw.get_exec_func()();
+
+after:
+    ++i;
+    if (i == 1)
+        goto jump;
+
+    std::printf("TEST 8: addresses: 0x%llx, 0x%llx\n* OK\n\n", after_label_address,
+#ifdef __GNUC__
+(unsigned long long)&&after
+#else
+0
+#endif
+    );
+}
+
 int main()
 {
     test1();
@@ -317,6 +379,7 @@ int main()
     test5();
     test6();
     test7();
+    test8();
 
     return 0;
 }

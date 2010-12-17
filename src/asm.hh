@@ -369,8 +369,8 @@ public:
     void jz_nr_rel32(Disp<int32_t> disp, BranchHint hint=BRANCH_HINT_NONE);
 
     // JMP
-    void jmp_nr_rel8(int8_t disp);
-    void jmp_nr_rel32(int32_t disp);
+    void jmp_nr_rel8(Disp<int8_t> disp);
+    void jmp_nr_rel32(Disp<int32_t> disp);
     void jmp_nr_rm64(ModrmSib const &modrmsib);
 
     // LEA
