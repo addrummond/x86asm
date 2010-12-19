@@ -206,6 +206,8 @@ public:
     void cmp_al_imm8(uint8_t imm);
     void cmp_eax_imm32(uint32_t imm);
     void cmp_rax_imm32(uint32_t imm); // This is also a special case of cmp_rm64_imm32.
+    void cmp_rm32_reg(ModrmSib const &modrmsib);
+    void cmp_rm64_reg(ModrmSib const &modrmsib);
 
     // DEC
     void dec_rm32(ModrmSib const &modrmsib);
@@ -318,16 +320,16 @@ public:
     void inc_reg64(Register reg);
 
     // Jcc
-    // See http://unixwiz.net/techtips/x86-jumps.html (synonyms excluded).
+    // See http://unixwiz.net/techtips/x86-jumps.html
     //
-    // JE,JZ             JZ
-    // JNE,JNZ           JNZ
-    // JB,JNAE,JC        JC
-    // JNB,JAE,JNC       JNC
-    // JBE,JNA           JBE
-    // JA,JNBE           JA
-    // JL,JNGE           JL
-    // JGE,JNL           JGE
+    // JE,JZ             JZ  *
+    // JNE,JNZ           JNZ *
+    // JB,JNAE,JC        JC  *
+    // JNB,JAE,JNC       JNC *
+    // JBE,JNA           JBE *
+    // JA,JNBE           JA  *
+    // JL,JNGE           JL  *
+    // JGE,JNL           JGE *
     // JLE,JNG           JLE
     // JG,JNLE           JG
     // JP,JPE            JPE
@@ -364,9 +366,39 @@ public:
     void jo_nr_rel32(Disp<int32_t> disp, BranchHint hint=BRANCH_HINT_NONE);
     void jpe_nr_rel32(Disp<int32_t> disp, BranchHint hint=BRANCH_HINT_NONE);
     void jpo_nr_rel32(Disp<int32_t> disp, BranchHint hint=BRANCH_HINT_NONE);
-    void jrcxz_nr_rel32(Disp<int32_t> disp, BranchHint hint=BRANCH_HINT_NONE);
     void js_nr_rel32(Disp<int32_t> disp, BranchHint hint=BRANCH_HINT_NONE);
     void jz_nr_rel32(Disp<int32_t> disp, BranchHint hint=BRANCH_HINT_NONE);
+    // Inline definitions for synonyms.
+    void je_st_rel8(Disp<int8_t> disp, BranchHint hint=BRANCH_HINT_NONE) { jz_st_rel8(disp, hint); }
+    void jne_st_rel8(Disp<int8_t> disp, BranchHint hint=BRANCH_HINT_NONE) { jnz_st_rel8(disp, hint); }
+    void jb_st_rel8(Disp<int8_t> disp, BranchHint hint=BRANCH_HINT_NONE) { jc_st_rel8(disp, hint); }
+    void jnae_st_rel8(Disp<int8_t> disp, BranchHint hint=BRANCH_HINT_NONE) { jc_st_rel8(disp, hint); }
+    void jnb_st_rel8(Disp<int8_t> disp, BranchHint hint=BRANCH_HINT_NONE) { jnc_st_rel8(disp, hint); }
+    void jae_st_rel8(Disp<int8_t> disp, BranchHint hint=BRANCH_HINT_NONE) { jnc_st_rel8(disp, hint); }
+    void jna_st_rel8(Disp<int8_t> disp, BranchHint hint=BRANCH_HINT_NONE) { jbe_st_rel8(disp, hint); }
+    void jnbe_st_rel8(Disp<int8_t> disp, BranchHint hint=BRANCH_HINT_NONE) { ja_st_rel8(disp, hint); }
+    void jnge_st_rel8(Disp<int8_t> disp, BranchHint hint=BRANCH_HINT_NONE) { jl_st_rel8(disp, hint); }
+    void jnl_st_rel8(Disp<int8_t> disp, BranchHint hint=BRANCH_HINT_NONE) { jge_st_rel8(disp, hint); }
+    void jng_st_rel8(Disp<int8_t> disp, BranchHint hint=BRANCH_HINT_NONE) { jle_st_rel8(disp, hint); }
+    void jnle_st_rel8(Disp<int8_t> disp, BranchHint hint=BRANCH_HINT_NONE) { jg_st_rel8(disp, hint); }
+    void jp_st_rel8(Disp<int8_t> disp, BranchHint hint=BRANCH_HINT_NONE) { jpe_st_rel8(disp, hint); }
+    void jnp_st_rel8(Disp<int8_t> disp, BranchHint hint=BRANCH_HINT_NONE) { jpo_st_rel8(disp, hint); }
+    void jcxz_st_rel8(Disp<int8_t> disp, BranchHint hint=BRANCH_HINT_NONE) { jrcxz_st_rel8(disp, hint); }
+    void jecxz_st_rel8(Disp<int8_t> disp, BranchHint hint=BRANCH_HINT_NONE) { jrcxz_st_rel8(disp, hint); }
+    void je_nr_rel32(Disp<int32_t> disp, BranchHint hint=BRANCH_HINT_NONE) { jz_nr_rel32(disp, hint); }
+    void jne_nr_rel32(Disp<int32_t> disp, BranchHint hint=BRANCH_HINT_NONE) { jnz_nr_rel32(disp, hint); }
+    void jb_nr_rel32(Disp<int32_t> disp, BranchHint hint=BRANCH_HINT_NONE) { jc_nr_rel32(disp, hint); }
+    void jnae_nr_rel32(Disp<int32_t> disp, BranchHint hint=BRANCH_HINT_NONE) { jc_nr_rel32(disp, hint); }
+    void jnb_nr_rel32(Disp<int32_t> disp, BranchHint hint=BRANCH_HINT_NONE) { jnc_nr_rel32(disp, hint); }
+    void jae_nr_rel32(Disp<int32_t> disp, BranchHint hint=BRANCH_HINT_NONE) { jnc_nr_rel32(disp, hint); }
+    void jna_nr_rel32(Disp<int32_t> disp, BranchHint hint=BRANCH_HINT_NONE) { jbe_nr_rel32(disp, hint); }
+    void jnbe_nr_rel32(Disp<int32_t> disp, BranchHint hint=BRANCH_HINT_NONE) { ja_nr_rel32(disp, hint); }
+    void jnge_nr_rel32(Disp<int32_t> disp, BranchHint hint=BRANCH_HINT_NONE) { jl_nr_rel32(disp, hint); }
+    void jnl_nr_rel32(Disp<int32_t> disp, BranchHint hint=BRANCH_HINT_NONE) { jge_nr_rel32(disp, hint); }
+    void jng_nr_rel32(Disp<int32_t> disp, BranchHint hint=BRANCH_HINT_NONE) { jle_nr_rel32(disp, hint); }
+    void jnle_nr_rel32(Disp<int32_t> disp, BranchHint hint=BRANCH_HINT_NONE) { jg_nr_rel32(disp, hint); }
+    void jp_nr_rel32(Disp<int32_t> disp, BranchHint hint=BRANCH_HINT_NONE) { jpe_nr_rel32(disp, hint); }
+    void jnp_nr_rel32(Disp<int32_t> disp, BranchHint hint=BRANCH_HINT_NONE) { jpo_nr_rel32(disp, hint); }
 
     // JMP
     void jmp_nr_rel8(Disp<int8_t> disp);

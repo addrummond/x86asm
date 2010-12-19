@@ -20,23 +20,24 @@ enum Opcode {
     OP_LDI64   = 5,
 
     OP_JMP     = 6,
-    OP_CALL    = 7,
-    OP_RET     = 8,
-    OP_CMP     = 9,
-    OP_JE      = 10,
-    OP_JG      = 11,
-    OP_JL      = 12,
+    OP_CJMP    = 7,
+    OP_CALL    = 8,
+    OP_RET     = 9,
+    OP_CMP     = 10,
+    OP_JE      = 11,
+    OP_JG      = 12,
+    OP_JL      = 13,
 
-    OP_IADD    = 13,
-    OP_IMUL    = 14,
-    OP_IDIV    = 15,
+    OP_IADD    = 14,
+    OP_IMUL    = 15,
+    OP_IDIV    = 16,
 
-    OP_MKVEC   = 16,
-    OP_REVEC   = 17,
-    OP_REFVEC  = 18,
-    OP_SETVEC  = 19,
+    OP_MKVEC   = 17,
+    OP_REVEC   = 18,
+    OP_REFVEC  = 19,
+    OP_SETVEC  = 20,
 
-    OP_DEBUG_PRINTREG = 20
+    OP_DEBUG_PRINTREG = 21
 };
 extern const Opcode FIRST_OP;
 
@@ -88,7 +89,7 @@ public:
 
     std::size_t size();
     Entry const &get_writer_assembler_for(uint8_t *bytecode);
-
+    uint64_t get_asm_code_addr_for(uint8_t *bytecode);
     void mark_bytecode(Entry const &e, uint8_t *bytecode_addr);
 
 private:

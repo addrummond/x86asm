@@ -21,6 +21,7 @@ static char const *op_names[] = {
     "LDI16",
     "LDI64",
     "JMP",
+    "CJMP",
     "CALL",
     "RET",
     "CMP",
@@ -46,7 +47,8 @@ static Operand const op_operand_specs[][4] = {
     { OPR_REGISTER, OPR_IMM16, END },               // LDI16
     { OPR_IMM64, END },                             // LDI64
 
-    { OPR_REGISTER, OPR_FLAGS, END },               // JMP 
+    { OPR_REGISTER, OPR_FLAGS, END },               // JMP
+    { OPR_IMM16, END },                             // CJMP
     { OPR_REGISTER, END },                          // CALL
     { OPR_REGISTER, END },                          // RET
     { OPR_REGISTER, OPR_REGISTER, OPR_FLAGS, END }, // CMP
@@ -270,27 +272,6 @@ bool Vm::parse_vm_asm(std::string const &input, std::vector<uint8_t> &instructio
 }
 
 ///////////
-Asm::CountingVectorWriter::CountingVectorWriter(std::size_t &current_size_, std::size_t initial_size)
-    : current_size(current_size_), VectorWriter(initial_size) { }
-
-void Asm::CountingVectorWriter::a(const uint8_t *buf, std::size_t length)
-{
-    current_size += length;
-    VectorWriter::a(buf, length);
-}
-
-void Asm::CountingVectorWriter::a(uint8_t byte)
-{
-    current_size++;
-    VectorWriter::a(byte);
-}
-
-void Asm::CountingVectorWriter::a(Asm::CountingVectorWriter const &vw)
-{
-    current_size += vw.size();
-    VectorWriter::a(vw);
-}
-
 Vm::VectorAssemblerBroker::Entry::Entry() { }
 Vm::VectorAssemblerBroker::Entry::Entry(Vm::VectorAssemblerBroker::Entry const &e)
     : writer(e.writer), assembler(e.assembler), offset(e.offset) { }
@@ -365,6 +346,16 @@ Vm::VectorAssemblerBroker::Entry const &Vm::VectorAssemblerBroker::get_writer_as
     }
     else {
         return *(it->second);
+    }
+}
+
+uint64_t Vm::VectorAssemblerBroker::get_asm_code_addr_for(uint8_t *bytecode)
+{
+    ConstMapIt it = items.find(bytecode);
+    if (it == items.end())
+        return NULL;
+    else {
+        return it->second->writer->get_start_addr(it->second->offset);
     }
 }
 
@@ -543,6 +534,51 @@ static void restore_all_regs(Asm::Assembler<WriterT> &a, uint64_t *buffer)
     a.pop_reg64(RCX);
 }
 
+//template <WriterT, std::size_t S>
+//static void mov_rmX_reg(Asm::Assembler<WriterT> &a, ModrmSib const &modrmsib);
+//template <WriterT, SIZE_8>
+//static void mov_rmX_reg(Asm::Assembler<WriterT> &a, 
+template <class WriterT>
+static void set_bool(Asm::Assembler<WriterT> &a, bool &var, bool tf)
+{
+    using namespace Asm;
+
+    a.mov_reg_imm64(RCX, PTR(&var));
+    a.mov_reg_imm64(RAX, tf ? 1 : 0);
+    if (sizeof(bool) == 1)
+        a.mov_rm8_reg(mem_2op(AL, RCX));
+    else if (sizeof(bool) == 4)
+        a.mov_rm32_reg(mem_2op(EAX, RCX));
+    else if (sizeof(bool) == 8)
+        a.mov_rm64_reg(mem_2op(RAX, RCX));
+    else assert(false);
+}
+
+template <class WriterT>
+static void jump_back_setting_start_to(Asm::Assembler<WriterT> &a,
+                                       WriterT &w,
+                                       uint64_t address_of_main_label,
+                                       uint64_t *saved_registers,
+                                       bool &registers_are_saved,
+                                       std::size_t &start,
+                                       std::size_t value)
+{
+    using namespace Asm;
+
+    // Save all registers and set 'registers_are_saved' to true.
+    save_all_regs(a, saved_registers);
+    set_bool(a, registers_are_saved, true);
+
+    // Increment 'start' by the relevant amount.
+    a.mov_reg_imm64(RAX, value);
+    a.mov_moffs64_rax(PTR(&start));
+
+    // Do a rel32 jump to main_label.
+    uint64_t addr = w.get_start_addr() + w.size();
+    int32_t rel = (int32_t)(address_of_main_label - addr);
+    a.jmp_nr_rel32(mkdisp<int32_t>(rel, DISP_SUB_ISIZE));
+}
+
 template <bool DEBUG_MODE>
 uint64_t main_loop_(std::vector<uint8_t> &instructions, std::size_t start, const std::size_t BLOB_SIZE)
 {
@@ -643,32 +679,17 @@ main_label:
         else if (*i == OP_DEBUG_PRINTREG) {
             emit_debug_printreg(*a, i[1]);
         }
+        else if (*i == OP_CJMP) {
+            std::size_t bytecode_offset = i[1] + (i[2] << 8);
+            jump_back_setting_start_to(*a, *w, address_of_main_label, saved_registers, registers_are_saved, start, bytecode_offset);
+        }
         else assert(false);
 
         // Makes it easier to see which ASM is for which VM instruction when debugging.
         if (DEBUG_MODE) a->nop();
     }
 
-    // Save all registers and set 'registers_are_saved' to true.
-    save_all_regs(*a, saved_registers);
-    a->mov_reg_imm64(RCX, PTR(&registers_are_saved));
-    a->mov_reg_imm64(RAX, 1);
-    if (sizeof(bool) == 1)
-        a->mov_rm8_reg(mem_2op(AL, RCX));
-    else if (sizeof(bool) == 4)
-        a->mov_rm32_reg(mem_2op(EAX, RCX));
-    else if (sizeof(bool) == 8)
-        a->mov_rm64_reg(mem_2op(RAX, RCX));
-    else assert(false);
-
-    // Do a rel32 jump to main_label.
-    addr = w->get_start_addr() + w->size();
-    rel = (int32_t)(address_of_main_label - addr);
-    a->jmp_nr_rel32(mkdisp<int32_t>(rel, DISP_SUB_ISIZE));
-
-    start += BLOB_SIZE * 4;
-
-    ab.mark_bytecode(e, &*(instructions.begin() + start));
+    jump_back_setting_start_to(*a, *w, address_of_main_label, saved_registers, registers_are_saved, start, start + BLOB_SIZE * 4);
 
     w->get_exec_func(e.offset)();
 }

@@ -537,6 +537,20 @@ INST(cmp_eax_imm32, 0, 0x3D, uint32_t, SIZE_32)
 INST(cmp_rax_imm32, REX_PREFIX | REX_W, 0x3D, uint32_t, SIZE_32)
 #undef INST
 
+template <class WriterT, Size SIZE>
+static void cmp_rmXX_reg_(WriterT &w, ModrmSib const &modrmsib)
+{
+    ABIFNZ(compute_rex(modrmsib, SIZE));
+    AB(0x39);
+}
+#define INST(name, size) \
+    template <class WriterT> void Asm::Assembler<WriterT>:: \
+    name (ModrmSib const &modrmsib) \
+    { cmp_rmXX_reg_<WriterT, size>(w, modrmsib); }
+INST(cmp_rm32_reg, SIZE_32)
+INST(cmp_rm64_reg, SIZE_64)
+#undef INST
+
 //
 // FABS
 //
@@ -1046,7 +1060,7 @@ void Asm::Assembler<WriterT>::ret()
 //
 
 template class Assembler<VectorWriter>;
-template class Assembler<CountingVectorWriter>;
+template class Asm::Assembler<Asm::CountingVectorWriter>;
 
 Asm::VectorWriter::VectorWriter(std::size_t initial_size_)
     : initial_size(initial_size_),
@@ -1155,4 +1169,25 @@ uint64_t Asm::VectorWriter::get_start_addr(int64_t offset)
 void *Asm::VectorWriter::get_start_ptr(int64_t offset)
 {
     return reinterpret_cast<void *>(mem + offset);
+}
+
+Asm::CountingVectorWriter::CountingVectorWriter(std::size_t &current_size_, std::size_t initial_size)
+    : current_size(current_size_), VectorWriter(initial_size) { }
+
+void Asm::CountingVectorWriter::a(const uint8_t *buf, std::size_t length)
+{
+    current_size += length;
+    VectorWriter::a(buf, length);
+}
+
+void Asm::CountingVectorWriter::a(uint8_t byte)
+{
+    current_size++;
+    VectorWriter::a(byte);
+}
+
+void Asm::CountingVectorWriter::a(Asm::CountingVectorWriter const &vw)
+{
+    current_size += vw.size();
+    VectorWriter::a(vw);
 }
