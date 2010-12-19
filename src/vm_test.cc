@@ -8,9 +8,6 @@ using namespace Vm;
 
 void test1()
 {
-    VectorWriter w;
-    VectorAssembler a(w);
-
     const char *code =
         " INCRW 2"
         " LDI16 1 2"

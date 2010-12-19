@@ -5,7 +5,6 @@
 #include <cstdlib>
 #include <cstring>
 #include <cerrno>
-#include <asm.hh>
 #include <iostream>
 #include <fstream>
 
@@ -270,6 +269,112 @@ bool Vm::parse_vm_asm(std::string const &input, std::vector<uint8_t> &instructio
     return true;
 }
 
+///////////
+Asm::CountingVectorWriter::CountingVectorWriter(std::size_t &current_size_, std::size_t initial_size)
+    : current_size(current_size_), VectorWriter(initial_size) { }
+
+void Asm::CountingVectorWriter::a(const uint8_t *buf, std::size_t length)
+{
+    current_size += length;
+    VectorWriter::a(buf, length);
+}
+
+void Asm::CountingVectorWriter::a(uint8_t byte)
+{
+    current_size++;
+    VectorWriter::a(byte);
+}
+
+void Asm::CountingVectorWriter::a(Asm::CountingVectorWriter const &vw)
+{
+    current_size += vw.size();
+    VectorWriter::a(vw);
+}
+
+Vm::VectorAssemblerBroker::Entry::Entry() { }
+Vm::VectorAssemblerBroker::Entry::Entry(Vm::VectorAssemblerBroker::Entry const &e)
+    : writer(e.writer), assembler(e.assembler), offset(e.offset) { }
+Vm::VectorAssemblerBroker::Entry::Entry(Asm::CountingVectorWriter *writer_, Asm::CountingVectorAssembler *assembler_, int64_t offset_)
+    : writer(writer_), assembler(assembler_), offset(offset_) { }
+bool Vm::VectorAssemblerBroker::Entry::operator<(Entry const &e) const
+{
+    if (writer < e.writer)
+        return true;
+    else if (writer == e.writer && assembler < e.assembler)
+        return true;
+    else if (writer == e.writer && assembler == e.assembler)
+        return (offset < e.offset) ? true : false;
+    else
+        return false;
+}
+bool Vm::VectorAssemblerBroker::Entry::operator==(Entry const &e) const
+{
+    return writer == e.writer && assembler == e.assembler && offset == e.offset;
+}
+Vm::VectorAssemblerBroker::Entry &Vm::VectorAssemblerBroker::Entry::operator=(Vm::VectorAssemblerBroker::Entry const &e)
+{
+    writer = e.writer;
+    assembler = e.assembler;
+    offset = e.offset;
+    return *this;
+}
+
+Vm::VectorAssemblerBroker::VectorAssemblerBroker(const std::size_t MAX_BYTES_)
+    : MAX_BYTES(MAX_BYTES_) { }
+
+std::size_t Vm::VectorAssemblerBroker::size()
+{ return items.size(); }
+
+Vm::VectorAssemblerBroker::Entry const &Vm::VectorAssemblerBroker::get_writer_assembler_for(uint8_t *bytecode)
+{
+    using namespace Asm;
+
+    ConstMapIt it = items.find(bytecode);
+    if (it == items.end()) {
+        CountingVectorWriter *w = new CountingVectorWriter(current_size);
+        CountingVectorAssembler *a = new CountingVectorAssembler(*w);
+        boost::shared_ptr<VectorAssemblerBroker::Entry> e(new VectorAssemblerBroker::Entry(w, a, 0));
+        items[bytecode] = e;
+        reverse_items[e] = bytecode;
+        return *e;
+    }
+    else if (current_size >= MAX_BYTES) {
+        // Not a very good algorithm...
+        std::size_t max;
+        MapIt it2;
+        int i;
+        for (i = 0, it2 = items.begin(); i < 5 && it2 != items.end(); ++i, ++it2) {
+            CountingVectorWriter *w = it2->second->writer;
+            if (w->size() < 2000) {
+                w->clear();
+                return *(it2->second);
+            }
+        }
+        assert(items.size() > 0);
+        if (it2 == items.end()) --it2; // Note that there must be at least one element in 'items' if current_size >= MAX_BYTES
+        delete it2->second->writer;
+        delete it2->second->assembler;
+        boost::shared_ptr<Entry> e(new VectorAssemblerBroker::Entry(
+            new CountingVectorWriter(current_size),
+            new CountingVectorAssembler(*(it2->second->assembler)),
+            0
+        ));
+        items[it2->first] = e;
+        reverse_items[e] = it2->first;
+        return *(it2->second);
+    }
+    else {
+        return *(it->second);
+    }
+}
+
+void Vm::VectorAssemblerBroker::mark_bytecode(Vm::VectorAssemblerBroker::Entry const &e, uint8_t *bytecode_addr)
+{
+    boost::shared_ptr<VectorAssemblerBroker::Entry> newEntry(new VectorAssemblerBroker::Entry(e.writer, e.assembler, e.writer->size()));
+    items[bytecode_addr] = newEntry;
+    reverse_items[newEntry] = bytecode_addr;
+}
+
 // Addresses of some functions we'll want to call.
 static const uint64_t malloc_ptr = reinterpret_cast<uint64_t>(std::malloc);
 
@@ -296,7 +401,7 @@ static void move_vmreg_ptr_to_x86reg(Asm::Assembler<WriterT> &a, RegId vmreg, As
 // Emit code to allocate tagged memory.
 // Leaves address (untagged) in RAX.
 template <class WriterT>
-void Vm::emit_malloc_constsize(Asm::Assembler<WriterT> &a, std::size_t size, RegId ptr_dest, unsigned tag)
+static void emit_malloc_constsize(Asm::Assembler<WriterT> &a, std::size_t size, RegId ptr_dest, unsigned tag)
 {
     using namespace Asm;
 
@@ -406,8 +511,7 @@ static const Asm::Register gp_regs[] = {
     Asm::RAX, Asm::RCX, Asm::RDX, Asm::RBX, Asm::RSP, Asm::RBP, Asm::RSI, Asm::RDI,
     Asm::R8D, Asm::R9D, Asm::R10D, Asm::R11D, Asm::R12D, Asm::R13D, Asm::R14D, Asm::R15D
 };
-template <class WriterT>
-static void save_all_regs(Asm::Assembler<WriterT> &a, uint64_t *buffer)
+static void save_all_regs(Asm::CountingVectorAssembler &a, uint64_t *buffer)
 {
     using namespace Asm;
 
@@ -462,6 +566,8 @@ uint64_t main_loop_(std::vector<uint8_t> &instructions, std::size_t start, const
     typedef std::vector<uint8_t>::iterator It;
     It i;
 
+    Vm::VectorAssemblerBroker ab(500);
+
     // <<<<< END OF VAR DEFINITIONS <<<<<
 
     // This could just be inline ASM, but since we already have an assembler,
@@ -506,8 +612,10 @@ main_label:
     if (start >= instructions.size())
         return 0;
 
-    VectorWriter *w = new VectorWriter;
-    VectorAssembler *a = new VectorAssembler(*w);
+    VectorAssemblerBroker::Entry e = ab.get_writer_assembler_for(&*(instructions.begin() + start));
+//    std::printf("ASM: %llx\n", (uint64_t)e.assembler);
+    CountingVectorAssembler *a = e.assembler;
+    CountingVectorWriter *w = e.writer;
 
     if (registers_are_saved) {
         restore_all_regs(*a, saved_registers);
@@ -560,10 +668,9 @@ main_label:
 
     start += BLOB_SIZE * 4;
 
-    w->get_exec_func()();
+    ab.mark_bytecode(e, &*(instructions.begin() + start));
 
-    delete w;
-    delete a;
+    w->get_exec_func(e.offset)();
 }
 uint64_t Vm::main_loop(std::vector<uint8_t> &instructions, std::size_t start, const std::size_t BLOB_SIZE)
 { main_loop_<false>(instructions, start, BLOB_SIZE); }

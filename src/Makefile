@@ -1,7 +1,9 @@
+BOOST_HEADERS_INCLUDES=-I/usr/include/boost
+
 LDFLAGS_=$(LDFLAGS)
-INCLUDES_=-I./ $(INCLUDES)
+INCLUDES_=-I./ $(BOOST_HEADERS_INCLUDES) $(INCLUDES)
 CXX=g++
-CXXFLAGS_=-arch x86_64 -Wall $(CXXFLAGS)
+CXXFLAGS_=-arch x86_64 $(CXXFLAGS)
 
 INVOKECXX=$(CXX) $(CXXFLAGS_) $(INCLUDES_)
 
@@ -14,7 +16,7 @@ util.o: util.hh util.cc
 asm.o: asm.cc asm.hh mremap.o util.o
 	$(INVOKECXX) -c asm.cc -o asm.o
 
-asm_test.o: mremap.o asm.o asm_test.cc
+asm_test.o: asm.o asm_test.cc mremap.o
 	$(INVOKECXX) -c asm_test.cc -o asm_test.o
 
 asm_test: asm_test.o
@@ -27,7 +29,7 @@ vm_test.o: vm.o vm_test.cc util.o
 	$(INVOKECXX) -c vm_test.cc -o vm_test.o
 
 vm_test: vm_test.o
-	$(INVOKECXX) vm.o vm_test.o util.o asm.o mremap.o -o vm_test
+	$(INVOKECXX) vm.o util.o asm.o mremap.o vm_test.o -o vm_test
 
 clean:
 	rm *_test ; rm *.o

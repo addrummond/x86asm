@@ -211,8 +211,8 @@ public:
     void dec_rm32(ModrmSib const &modrmsib);
     void dec_rm64(ModrmSib const &modrmsib);
     // Utils:
-    void dec_reg32(Register reg) { dec_rm32(reg_1op(reg)); }
-    void dec_reg64(Register reg) { dec_rm64(reg_1op(reg)); }
+    void dec_reg32(Register reg);
+    void dec_reg64(Register reg);
 
     // FABS
     void fabs_st0();
@@ -314,8 +314,8 @@ public:
     void inc_rm32(ModrmSib const &modrmsib);
     void inc_rm64(ModrmSib const &modrmsib);
     // Utils:
-    void inc_reg32(Register reg) { inc_rm32(reg_1op(reg)); }
-    void inc_reg64(Register reg) { inc_rm64(reg_1op(reg)); }
+    void inc_reg32(Register reg);
+    void inc_reg64(Register reg);
 
     // Jcc
     // See http://unixwiz.net/techtips/x86-jumps.html (synonyms excluded).
@@ -453,9 +453,10 @@ private:
 
 class VectorWriter {
 public:
+    static const std::size_t DEFAULT_INITIAL_SIZE = 20;
     static const std::size_t ROOM_AHEAD = 20;
 
-    VectorWriter(std::size_t initial_size = 20);
+    VectorWriter(std::size_t initial_size = DEFAULT_INITIAL_SIZE);
     VectorWriter(VectorWriter &vw);
     ~VectorWriter();
 
@@ -463,27 +464,41 @@ public:
     void a(uint8_t byte);
     void a(VectorWriter const &vw);
 
-    std::size_t size();
+    std::size_t size() const;
 
     void canonical_hex(std::string &o);
     void debug_print();
 
     typedef void (*voidf)(void);
-    uint8_t *get_mem();
-    voidf get_exec_func();
-    uint64_t get_start_addr();
-    void *get_start_ptr();
+    uint8_t *get_mem(int64_t offset=0);
+    voidf get_exec_func(int64_t offset=0);
+    uint64_t get_start_addr(int64_t offset=0);
+    void *get_start_ptr(int64_t offset=0);
 
     void clear();
 
 private:
-    const std::size_t initial_size
+    const std::size_t initial_size;
     std::size_t freebytes;
     std::size_t length;
     uint8_t *mem;
 };
 
 typedef Assembler<VectorWriter> VectorAssembler;
+
+class CountingVectorWriter : public VectorWriter { // (originally had this templated, but caused headaches)
+public:
+    CountingVectorWriter(std::size_t &current_size_, std::size_t initial_size = DEFAULT_INITIAL_SIZE);
+
+    void a(const uint8_t *buf, std::size_t length);
+    void a(uint8_t byte);
+    void a(CountingVectorWriter const &vw);
+
+private:
+    std::size_t &current_size;
+};
+
+typedef Assembler<CountingVectorWriter> CountingVectorAssembler;
 
 // Utility for converting pointers to uint64_t.
 #define PTR(p) reinterpret_cast<uint64_t>(p)

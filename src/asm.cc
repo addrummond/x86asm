@@ -14,7 +14,8 @@ using namespace Asm;
 #define R REX_PREFIX
 #define W (REX_PREFIX | REX_W)
 #define B (REX_PREFIX | REX_B | REX_W)
-static const uint8_t Asm::register_codes[][2] = {
+namespace Asm {
+static const uint8_t register_codes[][2] = {
     {0,0}, {0,1}, {0,2}, {0,3}, {0,4}, {0,5}, {0,6}, {0,7}, // EAX-EDI
     {W,0}, {W,1}, {W,2}, {W,3}, {W,4}, {W,5}, {W,6}, {W,7}, // RAX-RDI
     {B,0}, {B,1}, {B,2}, {B,3}, {B,4}, {B,5}, {B,6}, {B,7}, // R8D-R15D
@@ -23,7 +24,7 @@ static const uint8_t Asm::register_codes[][2] = {
     {0,0}, {0,1}, {0,2}, {0,3}, {0,4}, {0,5}, {0,6}, {0,7}, // XMM0-XMM7
     {0,0}, {0,1}, {0,2}, {0,3}, {0,4}, {0,5}, {0,6}, {0,7}  // AL-BH
 };
-static char const *Asm::register_names[] = {
+static char const *register_names[] = {
     "EAX", "ECX", "EDX", "EBX", "ESP", "EBP", "ESI", "EDI",
     "RAX", "RCX", "RDX", "RBX", "RSP", "RBP", "RSI", "RDI",
     "R8D", "R9D", "R10D", "R11D", "R12D", "R13D", "R14D", "R15D",
@@ -33,6 +34,7 @@ static char const *Asm::register_names[] = {
     "FS", "GS",
     "NOT_A_REGISTER"
 };
+}
 char const *Asm::register_name(Register reg) { return register_names[reg]; }
 uint8_t Asm::register_rex(Register reg) { assert(reg < FS); return register_codes[reg][0]; }
 uint8_t Asm::register_code(Register reg) { assert(reg < FS); return register_codes[reg][1]; }
@@ -50,7 +52,8 @@ bool has_additive_code_32(Register r)
     return r >= EAX && r <= EDI;
 }
 
-static unsigned Asm::register_byte_sizes[] = {
+namespace Asm {
+static unsigned register_byte_sizes[] = {
     4, 4, 4, 4, 4, 4, 4, 4, // EAX-EDI
     8, 8, 8, 8, 8, 8, 8, 8, // RAX-RDI
     8, 8, 8, 8, 8, 8, 8, 8, // R8D-R15D
@@ -58,6 +61,7 @@ static unsigned Asm::register_byte_sizes[] = {
     8, 8, 8, 8, 8, 8, 8, 8, // XMM0-XMM7
     1, 1, 1, 1, 1, 1, 1, 1  // AL-BH
 };
+}
 unsigned Asm::register_byte_size(Register reg) { assert(reg <= BH); return register_byte_sizes[reg]; }
 
 static uint8_t raw_modrm(uint8_t mod, uint8_t rm, uint8_t reg)
@@ -778,6 +782,15 @@ INST(dec_rm32, ECX/*1*/, 0xFF, SIZE_32)
 INST(dec_rm64, ECX/*1*/, 0xFF, SIZE_64)
 #undef INST
 
+template <class WriterT>
+void Asm::Assembler<WriterT>::dec_reg32(Register reg) { dec_rm32(reg_1op(reg)); }
+template <class WriterT>
+void Asm::Assembler<WriterT>::dec_reg64(Register reg) { dec_rm64(reg_1op(reg)); }
+template <class WriterT>
+void Asm::Assembler<WriterT>::inc_reg32(Register reg) { inc_rm32(reg_1op(reg)); }
+template <class WriterT>
+void Asm::Assembler<WriterT>::inc_reg64(Register reg) { inc_rm64(reg_1op(reg)); }
+
 //
 // Jcc
 //
@@ -1033,6 +1046,7 @@ void Asm::Assembler<WriterT>::ret()
 //
 
 template class Assembler<VectorWriter>;
+template class Assembler<CountingVectorWriter>;
 
 Asm::VectorWriter::VectorWriter(std::size_t initial_size_)
     : initial_size(initial_size_),
@@ -1043,7 +1057,6 @@ Asm::VectorWriter::VectorWriter(std::size_t initial_size_)
                                       initial_size, PROT_READ | PROT_WRITE | PROT_EXEC,
                                       MAP_PRIVATE | MAP_ANONYMOUS,
                                       -1, 0));
-
 }
 
 Asm::VectorWriter::VectorWriter(Asm::VectorWriter &vw)
@@ -1110,7 +1123,7 @@ void Asm::VectorWriter::a(VectorWriter const &vw)
     a(vw.mem, vw.length - vw.freebytes);
 }
 
-std::size_t Asm::VectorWriter::size()
+std::size_t Asm::VectorWriter::size() const
 {
     return length - freebytes;
 }
@@ -1126,20 +1139,20 @@ void Asm::VectorWriter::debug_print()
     Util::debug_hex_print(mem, length - freebytes);
 }
 
-uint8_t *Asm::VectorWriter::get_mem()
+uint8_t *Asm::VectorWriter::get_mem(int64_t offset)
 {
-    return mem;
+    return mem + offset;
 }
 
-Asm::VectorWriter::voidf Asm::VectorWriter::get_exec_func()
+Asm::VectorWriter::voidf Asm::VectorWriter::get_exec_func(int64_t offset)
 {
-    return reinterpret_cast<VectorWriter::voidf>(mem);
+    return reinterpret_cast<VectorWriter::voidf>(mem + offset);
 }
-uint64_t Asm::VectorWriter::get_start_addr()
+uint64_t Asm::VectorWriter::get_start_addr(int64_t offset)
 {
-    return reinterpret_cast<uint64_t>(mem);
+    return reinterpret_cast<uint64_t>(mem + offset);
 }
-void *Asm::VectorWriter::get_start_ptr()
+void *Asm::VectorWriter::get_start_ptr(int64_t offset)
 {
-    return reinterpret_cast<void *>(mem);
+    return reinterpret_cast<void *>(mem + offset);
 }
