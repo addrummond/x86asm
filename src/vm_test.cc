@@ -48,11 +48,11 @@ void test1()
 void test2()
 {
     const char *code =
-        " LDI16 1 0"
-        " LDI16 2 1"
-        " IADD 1 2"
-        " DEBUG_PRINTREG 1"
-        " CJMP 8"
+        "  LDI16 1 0"
+        "  LDI16 2 1"
+        " >IADD 1 2"
+        "  DEBUG_PRINTREG 1"
+        "  CJMP 8"
         ;
 
     std::vector<uint8_t> instructions;

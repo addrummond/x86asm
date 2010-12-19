@@ -69,6 +69,8 @@ static Operand const op_operand_specs[][4] = {
 };
 #undef END
 
+const uint32_t Vm::FLAG_DESTINATION = 0x80000000;
+
 const unsigned Vm::TAG_INT = 0;
 const unsigned Vm::TAG_DOUBLE = 1;
 const unsigned Vm::TAG_VECTOR = 2;
@@ -124,12 +126,15 @@ uint32_t Vm::make_imm24_instruction(Opcode opcode, uint32_t immediate)
 // Used in 'parse_vm_asm'.
 static bool finalizeInstruction(Opcode currentOpCode,
                                 std::vector<uint64_t> const &operands,
+                                uint32_t flags,
                                 std::vector<uint8_t> &instructions,
                                 std::string &emsg)
 {
-    uint32_t base = currentOpCode;
+    uint32_t base = currentOpCode | flags;
     uint64_t extra;
     bool has_extra = false;
+
+    assert(currentOpCode != OP_NULL);
 
     Operand const *operand_spec;
     std::vector<uint64_t>::const_iterator operand;
@@ -195,6 +200,8 @@ bool Vm::parse_vm_asm(std::string const &input, std::vector<uint8_t> &instructio
     std::string currentNumber;
     std::vector<uint64_t> operands;
 
+    uint32_t flags = 0;
+
     int last = 0;
     for (; i < input.end() || !(last++); ++i) {
         char c = last ? ' ' : *i;
@@ -202,6 +209,9 @@ bool Vm::parse_vm_asm(std::string const &input, std::vector<uint8_t> &instructio
         if (s == ST_INITIAL) {
             if (std::isalpha(c) || c == '_' || (currentOp.size() > 0 && std::isdigit(c))) {
                 currentOp.push_back(c);
+            }
+            else if(c == '>') {
+                flags |= FLAG_DESTINATION;
             }
             else if (std::isspace(c)) {
                 if (currentOp.size() == 0)
@@ -214,11 +224,12 @@ bool Vm::parse_vm_asm(std::string const &input, std::vector<uint8_t> &instructio
                 s = ST_RANDS_FOR_OP;
                 currentOperand = op_operands(currentOpCode);
                 if (*currentOperand == OPR_NULL) {
-                    if (! finalizeInstruction(currentOpCode, operands, instructions, emsg))
+                    if (! finalizeInstruction(currentOpCode, operands, flags, instructions, emsg))
                         return false;
                     s = ST_INITIAL;
                     currentOp = "";
                     operands.clear();
+                    flags = 0;
                 }
             }
         }
@@ -248,11 +259,12 @@ bool Vm::parse_vm_asm(std::string const &input, std::vector<uint8_t> &instructio
                     currentNumberIsHex = false;
 
                     if (*currentOperand == OPR_NULL) {
-                        if (! finalizeInstruction(currentOpCode, operands, instructions, emsg))
+                        if (! finalizeInstruction(currentOpCode, operands, flags, instructions, emsg))
                             return false;
                         s = ST_INITIAL;
                         currentOp = "";
                         operands.clear();
+                        flags = 0;
                     }
                 }
                 else {
@@ -366,6 +378,16 @@ void Vm::VectorAssemblerBroker::mark_bytecode(Vm::VectorAssemblerBroker::Entry c
     reverse_items[newEntry] = bytecode_addr;
 }
 
+Vm::VectorAssemblerBroker::Entry const *Vm::VectorAssemblerBroker::known_to_be_local(uint8_t *bytecode_addr1, uint8_t *bytecode_addr2)
+{
+    ConstMapIt it1 = items.find(bytecode_addr1);
+    ConstMapIt it2 = items.find(bytecode_addr2);
+    if (it1 != items.end() && it1 == it2)
+        return &*(it2->second);
+    else
+        return NULL;
+}
+
 // Addresses of some functions we'll want to call.
 static const uint64_t malloc_ptr = reinterpret_cast<uint64_t>(std::malloc);
 
@@ -432,7 +454,7 @@ static void emit_ldi(Asm::Assembler<WriterT> &a, RegId ptr_dest, uint64_t val)
 }
 
 template <class WriterT>
-static void emit_add(Asm::Assembler<WriterT> &a, RegId r_dest, RegId r_src)
+static void emit_iadd(Asm::Assembler<WriterT> &a, RegId r_dest, RegId r_src)
 {
     using namespace Asm;
     a.mov_reg_rm64(mem_2op_short(RDX, RBP, NOT_A_REGISTER/*index*/, SCALE_1, RegId_to_disp(r_dest)));
@@ -534,10 +556,20 @@ static void restore_all_regs(Asm::Assembler<WriterT> &a, uint64_t *buffer)
     a.pop_reg64(RCX);
 }
 
-//template <WriterT, std::size_t S>
-//static void mov_rmX_reg(Asm::Assembler<WriterT> &a, ModrmSib const &modrmsib);
-//template <WriterT, SIZE_8>
-//static void mov_rmX_reg(Asm::Assembler<WriterT> &a, 
+namespace {
+template <class WriterT, std::size_t S>
+struct ASM {
+    static void mov_rmX_reg(Asm::Assembler<WriterT> &a, Asm::ModrmSib const &modrmsib);
+};
+#define INST(size) \
+    template <class WriterT> \
+    struct ASM<WriterT, size/8> {                                 \
+        static void mov_rmX_reg(Asm::Assembler<WriterT> &a, Asm::ModrmSib const &modrmsib) \
+        { a.mov_rm ## size ## _reg(modrmsib); } \
+    };
+INST(8) INST(32) INST(64)
+#undef INST
+}
 template <class WriterT>
 static void set_bool(Asm::Assembler<WriterT> &a, bool &var, bool tf)
 {
@@ -545,13 +577,7 @@ static void set_bool(Asm::Assembler<WriterT> &a, bool &var, bool tf)
 
     a.mov_reg_imm64(RCX, PTR(&var));
     a.mov_reg_imm64(RAX, tf ? 1 : 0);
-    if (sizeof(bool) == 1)
-        a.mov_rm8_reg(mem_2op(AL, RCX));
-    else if (sizeof(bool) == 4)
-        a.mov_rm32_reg(mem_2op(EAX, RCX));
-    else if (sizeof(bool) == 8)
-        a.mov_rm64_reg(mem_2op(RAX, RCX));
-    else assert(false);
+    ASM<WriterT, sizeof(bool)>::mov_rmX_reg(a, mem_2op(AL, RCX));
 }
 
 template <class WriterT>
@@ -649,7 +675,7 @@ main_label:
         return 0;
 
     VectorAssemblerBroker::Entry e = ab.get_writer_assembler_for(&*(instructions.begin() + start));
-//    std::printf("ASM: %llx\n", (uint64_t)e.assembler);
+    std::printf("ASM: %llx\n", (uint64_t)e.assembler);
     CountingVectorAssembler *a = e.assembler;
     CountingVectorWriter *w = e.writer;
 
@@ -661,6 +687,10 @@ main_label:
          i != instructions.end() && i - instructions.begin() - start < BLOB_SIZE*4;
          i += 4) {
         assert(i + 3 < instructions.end());
+
+        // If this bit of the code is jumped to, cache the location of the generated assembly.
+        if (i[3] & FLAG_DESTINATION >> 24)
+            ab.mark_bytecode(e, &*i);
 
         if (*i == OP_NULL)
             assert(false);
@@ -674,14 +704,28 @@ main_label:
             emit_ldi(*a, i[1], i[2] + (i[3] << 8));
         }
         else if (*i == OP_IADD) {
-            emit_add(*a, i[1], i[2]);
+            emit_iadd(*a, i[1], i[2]);
         }
         else if (*i == OP_DEBUG_PRINTREG) {
             emit_debug_printreg(*a, i[1]);
         }
         else if (*i == OP_CJMP) {
             std::size_t bytecode_offset = i[1] + (i[2] << 8);
-            jump_back_setting_start_to(*a, *w, address_of_main_label, saved_registers, registers_are_saved, start, bytecode_offset);
+
+            // If this is a local jump, we can guarantee that the ASM code for the jump will be
+            // deleted at the same time as the ASM code for the target, so we can make the jump
+            // directly rather than going via the main JIT loop (much faster).
+            if (VectorAssemblerBroker::Entry const *je = ab.known_to_be_local(&*(instructions.begin() + start), &*(instructions.begin() + bytecode_offset))) {
+                // FAST(er)
+                uint64_t current_addr = w->get_start_addr() + w->size();
+                uint64_t target_addr = je->writer->get_start_addr(je->offset);
+                int32_t rel = (int32_t)(target_addr - current_addr);
+                a->jmp_nr_rel32(mkdisp<int32_t>(rel, DISP_SUB_ISIZE));
+            }
+            else {
+                // SLOW
+                jump_back_setting_start_to(*a, *w, address_of_main_label, saved_registers, registers_are_saved, start, bytecode_offset);
+            }
         }
         else assert(false);
 

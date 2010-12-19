@@ -49,6 +49,9 @@ enum Operand {
     OPR_FLAGS
 };
 
+// Flags which may be OR'd with any instruction.
+extern const uint32_t FLAG_DESTINATION; // Hint that jumps go here.
+
 typedef uint8_t RegId;
 extern const unsigned MAX_REG_ID;
 
@@ -91,6 +94,7 @@ public:
     Entry const &get_writer_assembler_for(uint8_t *bytecode);
     uint64_t get_asm_code_addr_for(uint8_t *bytecode);
     void mark_bytecode(Entry const &e, uint8_t *bytecode_addr);
+    Entry const *known_to_be_local(uint8_t *bytecode_addr1, uint8_t *bytecode_addr2);
 
 private:
     std::map<uint8_t *, boost::shared_ptr<Entry> > items;
