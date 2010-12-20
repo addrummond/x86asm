@@ -6,7 +6,10 @@
 #include <cstring>
 #include <cerrno>
 #include <iostream>
+#ifdef DEBUG
 #include <fstream>
+#endif
+#include <algorithm>
 
 //
 // Register scheme.
@@ -16,7 +19,7 @@
 //
 
 // TODO: Figure out why using R11D and R12D causes problems.
-const Asm::Register vm_regs_x86_regs[] = { Asm::RBX, Asm::R13D, Asm::R14D, Asm::R15D };
+const Asm::Register vm_regs_x86_regs[] = { Asm::R13D, Asm::R14D, Asm::R15D, Asm::RBX };
 const int NUM_VM_REGS_IN_X86_REGS = sizeof(vm_regs_x86_regs)/sizeof(Asm::Register);
 
 using namespace Vm;
@@ -577,21 +580,19 @@ static void restore_all_regs(Asm::Assembler<WriterT> &a, uint64_t *buffer, Asm::
 static Asm::Register registers_to_save[] = { Asm::RBX };
 //static Asm::Register registers_to_save[] = { /*Asm::RAX,*/ Asm::RCX, Asm::RDX, Asm::RBX, Asm::RSP, Asm::RBP, Asm::RSI, Asm::RDI, Asm::R8D, Asm::R9D, Asm::R10D, Asm::R11D, Asm::R12D, Asm::R13D, Asm::R14D, Asm::R15D };
 template <class WriterT>
-static void save_regs_before_c_funcall(Asm::Assembler<WriterT> &a)
+static void save_regs_before_c_funcall(Asm::Assembler<WriterT> &a, uint8_t numregs)
 {
     using namespace Asm;
-    a.fnop();
-    for (int i = 0; i < sizeof(registers_to_save) / sizeof(Register); ++i) {
+    for (int i = 0; i < sizeof(registers_to_save) / sizeof(Register) && i < numregs; ++i) {
         Register r = registers_to_save[i];
         a.push_rm64(reg_1op(r));
     }
-    a.fnop();
 }
 template <class WriterT>
-static void restore_regs_after_c_funcall(Asm::Assembler<WriterT> &a)
+static void restore_regs_after_c_funcall(Asm::Assembler<WriterT> &a, uint8_t numregs)
 {
     using namespace Asm;
-    for (int i = (sizeof(registers_to_save) / sizeof(Register)) - 1; i >= 0; --i) {
+    for (int i = std::min(sizeof(registers_to_save) / sizeof(Register), static_cast<unsigned long>(numregs)) - 1; i >= 0; --i) {
         Register r = registers_to_save[i];
         a.pop_rm64(reg_1op(r));
     }
@@ -608,7 +609,7 @@ static void print_vm_reg(RegId rid, uint64_t tagged_ptr)
     else assert(false);
 }
 template <class WriterT>
-static void emit_debug_printreg(Asm::Assembler<WriterT> &a, RegId r)
+static void emit_debug_printreg(Asm::Assembler<WriterT> &a, RegId r, uint8_t current_num_vm_registers)
 {
     using namespace Asm;
 
@@ -619,9 +620,9 @@ static void emit_debug_printreg(Asm::Assembler<WriterT> &a, RegId r)
     move_vmreg_ptr_to_guaranteed_x86reg(a, RSI, r);
     a.mov_reg_imm64(RCX, PTR(print_vm_reg));
     a.mov_reg_imm64(RAX, 0);
-    save_regs_before_c_funcall(a);
+    save_regs_before_c_funcall(a, current_num_vm_registers);
     a.call_rm64(reg_1op(RCX));
-    restore_regs_after_c_funcall(a);
+    restore_regs_after_c_funcall(a, current_num_vm_registers);
 }
 
 template <class WriterT>
@@ -703,6 +704,7 @@ static uint64_t inner_main_loop(Vm::VectorAssemblerBroker &ab, std::vector<uint8
 #endif
 
     bool last_instruction_exited = false;
+    uint8_t current_num_vm_registers = 0;
     for (std::vector<uint8_t>::const_iterator i = instructions.begin() + start;
          i != instructions.end() && i - instructions.begin() - start < BLOB_SIZE*4;
          i += 4) {
@@ -722,6 +724,7 @@ static uint64_t inner_main_loop(Vm::VectorAssemblerBroker &ab, std::vector<uint8
         }
         else if (*i == OP_INCRW) {
             emit_incrw(*a, i[1]);
+            current_num_vm_registers = i[1];
         }
         else if (*i == OP_LDI16) {
             emit_ldi(*a, i[1], i[2] + (i[3] << 8));
@@ -730,7 +733,7 @@ static uint64_t inner_main_loop(Vm::VectorAssemblerBroker &ab, std::vector<uint8
             emit_iadd(*a, i[1], i[2]);
         }
         else if (*i == OP_DEBUG_PRINTREG) {
-            emit_debug_printreg(*a, i[1]);
+            emit_debug_printreg(*a, i[1], current_num_vm_registers);
         }
         else if (*i == OP_CJMP) {
             std::size_t bytecode_offset = i[1] + (i[2] << 8);
@@ -758,7 +761,7 @@ static uint64_t inner_main_loop(Vm::VectorAssemblerBroker &ab, std::vector<uint8
 
 #ifdef DEBUG
     std::ofstream f;
-    f.open("/tmp/vm_debug_raw", std::ios::trunc);
+    f.open("/tmp/vm_debug_raw", std::ios::app);
     f.write(reinterpret_cast<char *>(w->get_mem(start)), w->size());
     f.close();
 #endif
