@@ -257,10 +257,11 @@ void test6()
     a.push_reg64(RBP); // Function preamble.
     a.mov_reg_reg64(RBP, RSP);
 
-    a.call_rel32(2);
+    // TODO: Why does this need 3 and not 2?
+    a.call_rel32(mkdisp(3, DISP_ADD_ISIZE));
     a.leave(); // 1 byte
     a.ret();   // 1 byte
-    a.push_rm64(reg_1op(RBP));
+    a.push_reg64(RBP);
     a.mov_rm64_reg(reg_2op(RSP, RBP));
     a.sub_rm64_imm8(reg_1op(RBP), 2);
     a.mov_reg_imm64(RAX, 15);

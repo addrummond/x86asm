@@ -2,6 +2,7 @@
 #include <cassert>
 #include <iostream>
 #include <util.hh>
+#include <cstdlib>
 
 using namespace Asm;
 using namespace Vm;
@@ -10,8 +11,8 @@ static void parse_or_die(const char *code, std::vector<uint8_t> &instructions)
 {
     std::string emsg;
     if (! parse_vm_asm(code, instructions, emsg)) {
-        std::cout << emsg;
-        assert(false);
+        std::cout << emsg << "\n";
+        std::exit(1);
     }
 }
 
@@ -48,6 +49,7 @@ void test1()
 void test2()
 {
     const char *code =
+        "  INCRW 2"
         "  LDI16 1 0"
         "  LDI16 2 1"
         " >IADD 1 2"

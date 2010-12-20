@@ -195,7 +195,7 @@ public:
     void and_rm64_imm32(ModrmSib const &modrmsib, uint32_t src);
 
     // CALL
-    void call_rel32(int32_t disp);
+    void call_rel32(Disp<int32_t> disp);
     void call_rm64(ModrmSib modrmsib);
 
     // CMP
@@ -400,10 +400,10 @@ public:
     void jp_nr_rel32(Disp<int32_t> disp, BranchHint hint=BRANCH_HINT_NONE) { jpe_nr_rel32(disp, hint); }
     void jnp_nr_rel32(Disp<int32_t> disp, BranchHint hint=BRANCH_HINT_NONE) { jpo_nr_rel32(disp, hint); }
 
-    // JMP
-    void jmp_nr_rel8(Disp<int8_t> disp);
-    void jmp_nr_rel32(Disp<int32_t> disp);
-    void jmp_nr_rm64(ModrmSib const &modrmsib);
+    // JMP (these have branch hints just to give the same method signature as other JMPs).
+    void jmp_nr_rel8(Disp<int8_t> disp, BranchHint hint=BRANCH_HINT_NONE);
+    void jmp_nr_rel32(Disp<int32_t> disp, BranchHint hint=BRANCH_HINT_NONE);
+    void jmp_nr_rm64(ModrmSib const &modrmsib, BranchHint hint=BRANCH_HINT_NONE);
 
     // LEA
     void lea_reg_m(ModrmSib const &modrmsib);

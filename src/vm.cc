@@ -62,10 +62,10 @@ static Operand const op_operand_specs[][4] = {
     { OPR_REGISTER, END },                          // INCRW
     { END },                                        // DECRW
     { OPR_REGISTER, OPR_IMM16, END },               // LDI16
-    { OPR_IMM64, END },                             // LDI64
+    { OPR_REGISTER, OPR_IMM64, END },               // LDI64
 
     { OPR_REGISTER, OPR_FLAGS, END },               // JMP
-    { OPR_IMM16, OPR_FLAGS, END },                  // CJMP
+    { OPR_IMM16, /*OPR_FLAGS,*/ END },              // CJMP
     { OPR_REGISTER, END },                          // CALL
     { OPR_REGISTER, END },                          // RET
     { OPR_REGISTER, OPR_REGISTER, END },            // CMP
@@ -381,7 +381,7 @@ Vm::VectorAssemblerBroker::Entry const *Vm::VectorAssemblerBroker::known_to_be_l
 {
     ConstMapIt it1 = items.find(bytecode_addr1);
     ConstMapIt it2 = items.find(bytecode_addr2);
-    if (it1 != items.end() && it1 == it2)
+    if (it1 != items.end() && it2 != items.end() && it1->second->writer == it2->second->writer)
         return &*(it2->second);
     else
         return NULL;
@@ -459,7 +459,7 @@ template <class WriterT>
 static void emit_incrw(Asm::Assembler<WriterT> &a, RegId num_regs)
 {
     using namespace Asm;
-    a.call_rel32(0);
+    a.call_rel32(mkdisp<int32_t>(0, DISP_ADD_ISIZE));
     a.push_rm64(reg_1op(RBP));
     a.mov_rm64_reg(reg_2op(RSP, RBP));
     if (num_regs > 8)
@@ -729,8 +729,10 @@ static uint64_t inner_main_loop(Vm::VectorAssemblerBroker &ab, std::vector<uint8
         last_instruction_exited = false;
 
         // If this bit of the code is jumped to, cache the location of the generated assembly.
-        if (i[3] & FLAG_DESTINATION >> 24)
+        if (i[3] & FLAG_DESTINATION >> 24) {
+            std::printf("MARKED: %p", &*i);
             ab.mark_bytecode(e, &*i);
+        }
 
         if (*i == OP_NULL)
             assert(false);
@@ -748,27 +750,40 @@ static uint64_t inner_main_loop(Vm::VectorAssemblerBroker &ab, std::vector<uint8
         else if (*i == OP_CMP) {
             emit_cmp(*a, i[1], i[2]);
         }
-//        else if (*i == OP_JE) {
-//            emit_je(*a, i[1], i[2]);
-//        }
         else if (*i == OP_IADD) {
             emit_iadd(*a, i[1], i[2]);
         }
         else if (*i == OP_DEBUG_PRINTREG) {
             emit_debug_printreg(*a, i[1], current_num_vm_registers);
         }
-        else if (*i == OP_CJMP) {
+        else if (*i == OP_CJMP || *i == OP_CJE) {
             std::size_t bytecode_offset = i[1] + (i[2] << 8);
+
+            typedef void (CountingVectorAssembler::*jmp_fptr)(Disp<int32_t> disp, BranchHint hint);
+            struct Pr { Opcode opcode; BranchHint hint; jmp_fptr fptr; };
+            static Pr const jmp_fptrs[] = {
+                { OP_CJMP, BRANCH_HINT_NONE, &CountingVectorAssembler::jmp_nr_rel32 },
+                { OP_CJE, BRANCH_HINT_NONE, &CountingVectorAssembler::je_nr_rel32 }
+            };
 
             // If this is a local jump, we can guarantee that the ASM code for the jump will be
             // created/deleted at the same time as the ASM code for the target, so we can make the jump
             // directly rather than going via the main JIT loop (much faster).
+            std::printf("LOOKING %p\n", &*(instructions.begin() + bytecode_offset));
             if (VectorAssemblerBroker::Entry const *je = ab.known_to_be_local(&*(instructions.begin() + start), &*(instructions.begin() + bytecode_offset))) {
                 // FAST(er)
                 uint64_t current_addr = w->get_start_addr() + w->size();
                 uint64_t target_addr = je->writer->get_start_addr(je->offset);
                 int32_t rel = (int32_t)(target_addr - current_addr);
-                a->jmp_nr_rel32(mkdisp<int32_t>(rel, DISP_SUB_ISIZE));
+
+                int j;
+                for (j = 0; j < sizeof(jmp_fptrs) / sizeof(Pr); ++i) {
+                    if (jmp_fptrs[j].opcode == *i) {
+                        (a->*(jmp_fptrs[j].fptr))(mkdisp<int32_t>(rel, DISP_SUB_ISIZE), jmp_fptrs[j].hint);
+                        break;
+                    }
+                }
+                assert(j < sizeof(jmp_fptrs) / sizeof(Pr));
             }
             else {
                 // SLOW

@@ -471,10 +471,10 @@ INST(xor_rm64_imm32, SIZE_64, uint32_t, SIZE_32, 0x35, 0x81, ESI/*6*/)
 //
 
 template <class WriterT>
-void Asm::Assembler<WriterT>::call_rel32(int32_t disp)
+void Asm::Assembler<WriterT>::call_rel32(Disp<int32_t> disp)
 {
     AB(0xE8);
-    A32(disp + 5); // HACK HACK HACK.
+    A32(disp.get(5)); // HACK HACK HACK.
 }
 
 template <class WriterT>
@@ -857,7 +857,7 @@ INST2(js, 0x78) INST2(jz, 0x74)
 //
 
 template <class WriterT, class IntT, Size IntTSize>
-static void jmp_nr_relXX_(WriterT &w, Disp<IntT> disp)
+static void jmp_nr_relXX_(WriterT &w, Disp<IntT> disp, BranchHint hint)
 {
     COMPILE_ASSERT(IntTSize == 4 || IntTSize == 1);
     AB(IntTSize == SIZE_8 ? 0xEB : 0xE9);
@@ -867,14 +867,14 @@ static void jmp_nr_relXX_(WriterT &w, Disp<IntT> disp)
 
 #define INST(name, int_t, int_t_size) \
     template <class WriterT> void Asm::Assembler<WriterT>:: \
-    name(Disp<int_t> disp)                                  \
-    { jmp_nr_relXX_<WriterT, int_t, int_t_size>(w, disp); }
+    name(Disp<int_t> disp, BranchHint hint)                                 \
+    { jmp_nr_relXX_<WriterT, int_t, int_t_size>(w, disp, hint); }
 INST(jmp_nr_rel8, int8_t, SIZE_8)
 INST(jmp_nr_rel32, int32_t, SIZE_32)
 #undef INST
 
 template <class WriterT>
-void Asm::Assembler<WriterT>::jmp_nr_rm64(ModrmSib const &modrmsib_)
+void Asm::Assembler<WriterT>::jmp_nr_rm64(ModrmSib const &modrmsib_, BranchHint hint)
 {
     assert(! modrmsib_.has_reg_operand());
     ModrmSib modrmsib = modrmsib_;
