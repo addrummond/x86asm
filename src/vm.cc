@@ -577,13 +577,14 @@ static void restore_all_regs(Asm::Assembler<WriterT> &a, uint64_t *buffer, Asm::
 // Save those registers which
 //     (i)  belong to the caller according to the X86-64 ABI.
 //     (ii) are used to hold VM registers.
+static const int SAVE_OFFSET = 3;
 static Asm::Register registers_to_save[] = { Asm::RBX };
 //static Asm::Register registers_to_save[] = { /*Asm::RAX,*/ Asm::RCX, Asm::RDX, Asm::RBX, Asm::RSP, Asm::RBP, Asm::RSI, Asm::RDI, Asm::R8D, Asm::R9D, Asm::R10D, Asm::R11D, Asm::R12D, Asm::R13D, Asm::R14D, Asm::R15D };
 template <class WriterT>
 static void save_regs_before_c_funcall(Asm::Assembler<WriterT> &a, uint8_t numregs)
 {
     using namespace Asm;
-    for (int i = 0; i < sizeof(registers_to_save) / sizeof(Register) && i < numregs; ++i) {
+    for (int i = 0; i < sizeof(registers_to_save) / sizeof(Register) && i < numregs - SAVE_OFFSET; ++i) {
         Register r = registers_to_save[i];
         a.push_rm64(reg_1op(r));
     }
@@ -592,7 +593,7 @@ template <class WriterT>
 static void restore_regs_after_c_funcall(Asm::Assembler<WriterT> &a, uint8_t numregs)
 {
     using namespace Asm;
-    for (int i = std::min(sizeof(registers_to_save) / sizeof(Register), static_cast<unsigned long>(numregs)) - 1; i >= 0; --i) {
+    for (int i = std::min(sizeof(registers_to_save) / sizeof(Register), static_cast<unsigned long>(numregs - SAVE_OFFSET)) - 1; i >= 0; --i) {
         Register r = registers_to_save[i];
         a.pop_rm64(reg_1op(r));
     }
