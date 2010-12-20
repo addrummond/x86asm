@@ -705,7 +705,7 @@ static uint64_t inner_main_loop(Vm::VectorAssemblerBroker &ab, std::vector<uint8
             std::size_t bytecode_offset = i[1] + (i[2] << 8);
 
             // If this is a local jump, we can guarantee that the ASM code for the jump will be
-            // deleted at the same time as the ASM code for the target, so we can make the jump
+            // created/deleted at the same time as the ASM code for the target, so we can make the jump
             // directly rather than going via the main JIT loop (much faster).
             if (VectorAssemblerBroker::Entry const *je = ab.known_to_be_local(&*(instructions.begin() + start), &*(instructions.begin() + bytecode_offset))) {
                 // FAST(er)
