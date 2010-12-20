@@ -297,28 +297,6 @@ Vm::VectorAssemblerBroker::Entry::Entry(Vm::VectorAssemblerBroker::Entry const &
     : writer(e.writer), assembler(e.assembler), offset(e.offset) { }
 Vm::VectorAssemblerBroker::Entry::Entry(Asm::CountingVectorWriter *writer_, Asm::CountingVectorAssembler *assembler_, int64_t offset_)
     : writer(writer_), assembler(assembler_), offset(offset_) { }
-bool Vm::VectorAssemblerBroker::Entry::operator<(Entry const &e) const
-{
-    if (writer < e.writer)
-        return true;
-    else if (writer == e.writer && assembler < e.assembler)
-        return true;
-    else if (writer == e.writer && assembler == e.assembler)
-        return (offset < e.offset) ? true : false;
-    else
-        return false;
-}
-bool Vm::VectorAssemblerBroker::Entry::operator==(Entry const &e) const
-{
-    return writer == e.writer && assembler == e.assembler && offset == e.offset;
-}
-Vm::VectorAssemblerBroker::Entry &Vm::VectorAssemblerBroker::Entry::operator=(Vm::VectorAssemblerBroker::Entry const &e)
-{
-    writer = e.writer;
-    assembler = e.assembler;
-    offset = e.offset;
-    return *this;
-}
 
 Vm::VectorAssemblerBroker::VectorAssemblerBroker(const std::size_t MAX_BYTES_)
     : MAX_BYTES(MAX_BYTES_) { }

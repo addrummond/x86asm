@@ -79,10 +79,6 @@ public:
         Asm::CountingVectorWriter *writer;
         Asm::CountingVectorAssembler *assembler;
         int64_t offset; // Offset into the generated assembly corresponding to the bytecode position.
-
-        bool operator<(Entry const &e) const;
-        bool operator==(Entry const &e) const;
-        Entry &operator=(Entry const &e);
     };
 
     typedef std::map<uint8_t const *, boost::shared_ptr<Entry> >::iterator MapIt;
