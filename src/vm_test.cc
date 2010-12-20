@@ -24,7 +24,7 @@ void test1()
         " INCRW 2"
         " LDI16 1 2"
         " DEBUG_PRINTREG 1"
-//        " LDI16 2 3"
+        " LDI16 2 3"
 //        " IADD 1 2"
 //        " DEBUG_PRINTREG 1"
 //        " EXIT 1"

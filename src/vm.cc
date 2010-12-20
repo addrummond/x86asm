@@ -632,6 +632,8 @@ static void set_bool(Asm::Assembler<WriterT> &a, bool &var, bool tf)
 template <class WriterT>
 static void jump_back_setting_start_to(Asm::Assembler<WriterT> &a,
                                        WriterT &w,
+                                       uint64_t const base_pointer_for_main_loop,
+                                       uint64_t const stack_pointer_for_main_loop,
                                        uint64_t address_of_main_label,
                                        uint64_t *saved_registers,
                                        bool &registers_are_saved,
@@ -778,13 +780,13 @@ main_label:
             }
             else {
                 // SLOW
-                jump_back_setting_start_to(*a, *w, address_of_main_label, saved_registers, registers_are_saved, start, bytecode_offset);
+                jump_back_setting_start_to(*a, *w, base_pointer_for_main_loop, stack_pointer_for_main_loop, address_of_main_label, saved_registers, registers_are_saved, start, bytecode_offset);
             }
         }
         else assert(false);
     }
 
-    jump_back_setting_start_to(*a, *w, address_of_main_label, saved_registers, registers_are_saved, start, start + BLOB_SIZE * 4);
+    jump_back_setting_start_to(*a, *w, base_pointer_for_main_loop, stack_pointer_for_main_loop, address_of_main_label, saved_registers, registers_are_saved, start, start + BLOB_SIZE * 4);
 
     if (DEBUG) {
         std::ofstream f;
@@ -799,3 +801,5 @@ uint64_t Vm::main_loop(std::vector<uint8_t> &instructions, std::size_t start, co
 { main_loop_<false>(instructions, start, BLOB_SIZE); }
 uint64_t Vm::main_loop_debug(std::vector<uint8_t> &instructions, std::size_t start, const std::size_t BLOB_SIZE)
 { main_loop_<true>(instructions, start, BLOB_SIZE); }
+
+
