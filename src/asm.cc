@@ -266,16 +266,9 @@ static uint8_t reg_modrm(Register reg) // Single register.
     return 0xC0 + register_code(reg);
 }
 
-static void rex_reg_code(Register reg, uint8_t &rex, uint8_t &rcode)
+static uint8_t compute_rex(ModrmSib const &modrmsib, Size size, bool allow_rex_w=true) // Returns 0 if no REX.
 {
-    rex = register_rex(reg);
-    rcode = register_code(reg);
-}
-#define RRC(reg, v1, v2) uint8_t v1, v2; rex_reg_code(reg, v1, v2)
-
-static uint8_t compute_rex(ModrmSib const &modrmsib, Size size) // Returns 0 if no REX.
-{
-    uint8_t rex = 0;
+    uint8_t rex = (size == SIZE_64 && allow_rex_w ? REX_W : 0);
     if (size == SIZE_64)
         rex |= REX_W;
 
@@ -296,6 +289,14 @@ static uint8_t compute_rex(ModrmSib const &modrmsib, Size size) // Returns 0 if 
 
     if (rex != 0)
         rex |= REX_PREFIX;
+    return rex;
+}
+static uint8_t compute_rex_for_reg(Register reg, Size size, bool allow_rex_w=true)
+{
+    uint8_t rex = (size == SIZE_64 && allow_rex_w ? REX_W : 0);
+    rex |= REX_PREFIX;
+    if (reg >= R8D && reg <= R15D)
+        rex |= REX_B;
     return rex;
 }
 
@@ -943,9 +944,8 @@ static void mov_reg_immX_(Assembler<WriterT> &a, WriterT &w, Register reg, ImmT 
 {
     assert(((SIZE == SIZE_32 && has_additive_code_32(reg)) ||
             (SIZE == SIZE_64 && has_additive_code_64(reg))));
-    RRC(reg, rex, rcode);
-    ABIFNZ(rex);
-    AB(0xB8 + rcode);
+    ABIFNZ(compute_rex_for_reg(reg, SIZE));
+    AB(0xB8 + register_code(reg));
     w.a(reinterpret_cast<uint8_t *>(&imm), SIZE);
 }
 
@@ -975,6 +975,7 @@ template <class WriterT>
 void Asm::Assembler<WriterT>::pop_reg64(Register reg)
 {
     assert(has_additive_code_64(reg));
+    ABIFNZ(compute_rex_for_reg(reg, SIZE_64, false));
     AB(0x58 + register_code(reg));
 }
 
@@ -982,6 +983,8 @@ template <class WriterT>
 void Asm::Assembler<WriterT>::push_reg64(Register reg)
 {
     assert(has_additive_code_64(reg));
+//    std::printf("\nHEX: %x %x\n\n", (int)compute_rex_for_reg(reg, SIZE_64, false), 0x50 + register_code(reg));
+    ABIFNZ(compute_rex_for_reg(reg, SIZE_64, false));
     AB(0x50 + register_code(reg));
 }
 
@@ -997,6 +1000,7 @@ static void push_rmX_(Assembler<WriterT> &a, WriterT &w, ModrmSib modrmsib)
             a.pop_reg64(modrmsib.simple_register());
     }
     else {
+        ABIFNZ(compute_rex(modrmsib, RM_SIZE, false));
         AB(OPCODE);
         modrmsib.reg = ESI/*6*/;
         write_modrmsib_disp(w, modrmsib);
@@ -1035,7 +1039,6 @@ void Asm::Assembler<WriterT>::ret()
     AB(0xc3);
 }
 
-#undef RRC
 #undef AB
 #undef AZ
 #undef A
