@@ -396,17 +396,19 @@ Vm::VectorAssemblerBroker::Entry const *Vm::VectorAssemblerBroker::known_to_be_l
         return NULL;
 }
 
+const int NUM_VM_REGS_IN_X86_REGS = 0;
+
 static int8_t RegId_to_disp(RegId id)
 {
-    assert(id <= 127 && id > 8);
-    return (id-8) * -8;
+    assert(id <= 127 && id > NUM_VM_REGS_IN_X86_REGS);
+    return (id-NUM_VM_REGS_IN_X86_REGS) * -8;
 }
 
 template <class WriterT>
 static void move_x86reg_to_vmreg_ptr(Asm::Assembler<WriterT> &a, RegId vmreg, Asm::Register x86reg)
 {
     using namespace Asm;
-    if (vmreg <= 8)
+    if (vmreg <= NUM_VM_REGS_IN_X86_REGS)
         a.mov_reg_reg64(static_cast<Register>(R8D + vmreg - 1), x86reg);
     else
         a.mov_rm64_reg(mem_2op_short(x86reg, RBP, NOT_A_REGISTER/*index*/, SCALE_1, RegId_to_disp(vmreg)));
@@ -416,16 +418,17 @@ template <class WriterT>
 static Asm::Register move_vmreg_ptr_to_x86reg(Asm::Assembler<WriterT> &a, Asm::Register x86reg, RegId vmreg)
 {
     using namespace Asm;
-    if (vmreg <= 8)
+    if (vmreg <= NUM_VM_REGS_IN_X86_REGS)
         return static_cast<Register>(R8D + vmreg - 1);
     a.mov_reg_rm64(mem_2op_short(x86reg, RBP, NOT_A_REGISTER/*index*/, SCALE_1, RegId_to_disp(vmreg)));
+    return x86reg;
 }
 
 template <class WriterT>
 static void move_vmreg_ptr_to_guaranteed_x86reg(Asm::Assembler<WriterT> &a, Asm::Register x86reg, RegId vmreg)
 {
     using namespace Asm;
-    if (vmreg <= 8)
+    if (vmreg <= NUM_VM_REGS_IN_X86_REGS)
         a.mov_reg_reg64(x86reg, static_cast<Register>(R8D + vmreg - 1));
     else
         a.mov_reg_rm64(mem_2op_short(x86reg, RBP, NOT_A_REGISTER/*index*/, SCALE_1, RegId_to_disp(vmreg)));
@@ -496,8 +499,23 @@ static void emit_iadd(Asm::Assembler<WriterT> &a, RegId r_dest, RegId r_src)
     a.mov_rm64_reg(mem_2op(RAX, r1));
 }
 
+namespace {
+template <class WriterT, std::size_t S>
+struct ASM {
+    static void mov_rmX_reg(Asm::Assembler<WriterT> &a, Asm::ModrmSib const &modrmsib);
+};
+#define INST(size) \
+    template <class WriterT> \
+    struct ASM<WriterT, size/8> {                                 \
+        static void mov_rmX_reg(Asm::Assembler<WriterT> &a, Asm::ModrmSib const &modrmsib) \
+        { a.mov_rm ## size ## _reg(modrmsib); } \
+    };
+INST(8) INST(32) INST(64)
+#undef INST
+}
+
 template <class WriterT>
-static void emit_exit(Asm::Assembler<WriterT> &a, uint64_t const &bpfml, uint64_t const &spfml, RegId retreg)
+static void emit_exit(Asm::Assembler<WriterT> &a, uint64_t const &bpfml, uint64_t const &spfml, bool &exit, RegId retreg)
 {
     using namespace Asm;
 
@@ -508,6 +526,11 @@ static void emit_exit(Asm::Assembler<WriterT> &a, uint64_t const &bpfml, uint64_
     a.mov_reg_rm64(mem_2op(RBP, RCX));
     a.mov_reg_imm64(RCX, PTR(&spfml));
     a.mov_reg_rm64(mem_2op(RSP, RCX));
+
+    // Indicate that we don't want to trampoline.
+    a.mov_reg_imm64(RCX, PTR(&exit));
+    a.mov_reg_imm64(RDX, 1);
+    ASM<WriterT, sizeof(bool)*8>::mov_rmX_reg(a, mem_2op(RDX, RCX));
 
     a.leave(); // Now that we've reset ESP/EBP, calling leave/ret
     a.ret();   // will return from main_loop_.
@@ -595,20 +618,6 @@ static void emit_debug_printreg(Asm::Assembler<WriterT> &a, RegId r)
     a.call_rm64(reg_1op(RCX));
 }
 
-namespace {
-template <class WriterT, std::size_t S>
-struct ASM {
-    static void mov_rmX_reg(Asm::Assembler<WriterT> &a, Asm::ModrmSib const &modrmsib);
-};
-#define INST(size) \
-    template <class WriterT> \
-    struct ASM<WriterT, size/8> {                                 \
-        static void mov_rmX_reg(Asm::Assembler<WriterT> &a, Asm::ModrmSib const &modrmsib) \
-        { a.mov_rm ## size ## _reg(modrmsib); } \
-    };
-INST(8) INST(32) INST(64)
-#undef INST
-}
 template <class WriterT>
 static void set_bool(Asm::Assembler<WriterT> &a, bool &var, bool tf)
 {
@@ -700,7 +709,7 @@ static uint64_t inner_main_loop(Vm::VectorAssemblerBroker &ab, std::vector<uint8
         if (*i == OP_NULL)
             assert(false);
         else if (*i == OP_EXIT) {
-            emit_exit(*a, base_pointer_for_main_loop, stack_pointer_for_main_loop, i[1]);
+            emit_exit(*a, base_pointer_for_main_loop, stack_pointer_for_main_loop, exit, i[1]);
         }
         else if (*i == OP_INCRW) {
             emit_incrw(*a, i[1]);
