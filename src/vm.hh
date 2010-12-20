@@ -85,26 +85,25 @@ public:
         Entry &operator=(Entry const &e);
     };
 
-    typedef std::map<uint8_t *, boost::shared_ptr<Entry> >::iterator MapIt;
-    typedef std::map<uint8_t *, boost::shared_ptr<Entry> >::const_iterator ConstMapIt;
+    typedef std::map<uint8_t const *, boost::shared_ptr<Entry> >::iterator MapIt;
+    typedef std::map<uint8_t const *, boost::shared_ptr<Entry> >::const_iterator ConstMapIt;
 
     VectorAssemblerBroker(const std::size_t MAX_BYTES);
 
     std::size_t size();
-    Entry const &get_writer_assembler_for(uint8_t *bytecode);
-    uint64_t get_asm_code_addr_for(uint8_t *bytecode);
-    void mark_bytecode(Entry const &e, uint8_t *bytecode_addr);
-    Entry const *known_to_be_local(uint8_t *bytecode_addr1, uint8_t *bytecode_addr2);
+    Entry const &get_writer_assembler_for(uint8_t const *bytecode);
+    uint64_t get_asm_code_addr_for(uint8_t const *bytecode);
+    void mark_bytecode(Entry const &e, uint8_t const *bytecode_addr);
+    Entry const *known_to_be_local(uint8_t const *bytecode_addr1, uint8_t const *bytecode_addr2);
 
 private:
-    std::map<uint8_t *, boost::shared_ptr<Entry> > items;
-    std::map<boost::shared_ptr<Entry>, uint8_t *> reverse_items;
+    std::map<uint8_t const *, boost::shared_ptr<Entry> > items;
+    std::map<boost::shared_ptr<Entry>, uint8_t const *> reverse_items;
     const std::size_t MAX_BYTES;
     std::size_t current_size;
 };
 
 uint64_t main_loop(std::vector<uint8_t> &instructions, std::size_t start, const std::size_t BLOB_SIZE=20);
-uint64_t main_loop_debug(std::vector<uint8_t> &instructions, std::size_t start, const std::size_t BLOB_SIZE=20);
 
 }
 

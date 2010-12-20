@@ -26,7 +26,7 @@ void test1()
         " DEBUG_PRINTREG 1"
         " LDI16 2 3"
 //        " IADD 1 2"
-//        " DEBUG_PRINTREG 1"
+        " DEBUG_PRINTREG 1"
 //        " EXIT 1"
         ;
 
@@ -34,7 +34,7 @@ void test1()
     parse_or_die(code, instructions);
     Util::debug_hex_print(&instructions[0], instructions.size());
 
-    uint64_t rval = Vm::main_loop_debug(instructions, 0, 2 /*small BLOB_SIZE to maximize chance of triggering bugs*/);
+    uint64_t rval = Vm::main_loop(instructions, 0, 20 /*small BLOB_SIZE to maximize chance of triggering bugs*/);
     assert(rval != 0);
     uint64_t rvali = *((uint64_t*)rval);
     std::printf("TEST1: rval=%lli\n", rvali);
@@ -59,7 +59,7 @@ void test2()
     parse_or_die(code, instructions);
     Util::debug_hex_print(&instructions[0], instructions.size());
 
-    uint64_t rval = Vm::main_loop_debug(instructions, 0, 100);
+    uint64_t rval = Vm::main_loop(instructions, 0, 100);
 }
 
 int main()

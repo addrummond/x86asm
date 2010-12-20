@@ -326,7 +326,7 @@ Vm::VectorAssemblerBroker::VectorAssemblerBroker(const std::size_t MAX_BYTES_)
 std::size_t Vm::VectorAssemblerBroker::size()
 { return items.size(); }
 
-Vm::VectorAssemblerBroker::Entry const &Vm::VectorAssemblerBroker::get_writer_assembler_for(uint8_t *bytecode)
+Vm::VectorAssemblerBroker::Entry const &Vm::VectorAssemblerBroker::get_writer_assembler_for(uint8_t const *bytecode)
 {
     using namespace Asm;
 
@@ -369,7 +369,7 @@ Vm::VectorAssemblerBroker::Entry const &Vm::VectorAssemblerBroker::get_writer_as
     }
 }
 
-uint64_t Vm::VectorAssemblerBroker::get_asm_code_addr_for(uint8_t *bytecode)
+uint64_t Vm::VectorAssemblerBroker::get_asm_code_addr_for(uint8_t const *bytecode)
 {
     ConstMapIt it = items.find(bytecode);
     if (it == items.end())
@@ -379,14 +379,14 @@ uint64_t Vm::VectorAssemblerBroker::get_asm_code_addr_for(uint8_t *bytecode)
     }
 }
 
-void Vm::VectorAssemblerBroker::mark_bytecode(Vm::VectorAssemblerBroker::Entry const &e, uint8_t *bytecode_addr)
+void Vm::VectorAssemblerBroker::mark_bytecode(Vm::VectorAssemblerBroker::Entry const &e, uint8_t const *bytecode_addr)
 {
     boost::shared_ptr<VectorAssemblerBroker::Entry> newEntry(new VectorAssemblerBroker::Entry(e.writer, e.assembler, e.writer->size()));
     items[bytecode_addr] = newEntry;
     reverse_items[newEntry] = bytecode_addr;
 }
 
-Vm::VectorAssemblerBroker::Entry const *Vm::VectorAssemblerBroker::known_to_be_local(uint8_t *bytecode_addr1, uint8_t *bytecode_addr2)
+Vm::VectorAssemblerBroker::Entry const *Vm::VectorAssemblerBroker::known_to_be_local(uint8_t const *bytecode_addr1, uint8_t const *bytecode_addr2)
 {
     ConstMapIt it1 = items.find(bytecode_addr1);
     ConstMapIt it2 = items.find(bytecode_addr2);
@@ -513,42 +513,6 @@ static void emit_exit(Asm::Assembler<WriterT> &a, uint64_t const &bpfml, uint64_
     a.ret();   // will return from main_loop_.
 }
 
-static void print_vm_reg(RegId rid, uint64_t tagged_ptr)
-{
-    uint64_t tag = tagged_ptr & 0x0000000000000003;
-    std::printf("- REGISTER %i\n- TAG      %lli (%s)\n", (int)rid, tag, tag_name(tag));
-    if (tag == TAG_INT) {
-        std::printf("- PTR:     0x%llx\n", (unsigned long long)tagged_ptr);
-        std::printf("- VALUE:   %lli\n\n", *((long long *)(tagged_ptr & 0xFFFFFFFFFFFFFFFC)));
-    }
-    else assert(false);
-}
-static void print_vm_reg2(RegId rid, uint64_t tagged_ptr)
-{
-    uint64_t tag = tagged_ptr & 0x0000000000000003;
-    std::printf("- REGISTER %i\n- TAG      %lli (%s)\n", (int)rid, tag, tag_name(tag));
-    if (tag == TAG_INT) {
-        std::printf("- PTR:     0x%llx\n", (unsigned long long)tagged_ptr);
-        std::printf("- VALUE:   %lli\n\n", *((long long *)(tagged_ptr & 0xFFFFFFFFFFFFFFFC)));
-    }
-    else assert(false);
-}
-
-template <class WriterT>
-static void emit_debug_printreg(Asm::Assembler<WriterT> &a, RegId r)
-{
-    using namespace Asm;
-    a.mov_reg_imm32(EDI, static_cast<uint32_t>(r));
-    move_vmreg_ptr_to_guaranteed_x86reg(a, RSI, r);
-    a.mov_reg_imm64(RCX, PTR(print_vm_reg2));
-    a.mov_reg_imm64(RAX, 0);
-    a.call_rm64(reg_1op(RCX));
-    a.mov_reg_imm32(EDI, static_cast<uint32_t>(r));
-    move_vmreg_ptr_to_guaranteed_x86reg(a, RSI, r);
-    a.mov_reg_imm64(RCX, PTR(print_vm_reg));
-    a.call_rm64(reg_1op(RCX));
-}
-
 template <class WriterT>
 static void debug_print_x86reg64(Asm::Assembler<WriterT> &a, Asm::Register r, const char *preamble)
 {
@@ -590,19 +554,45 @@ static void save_all_regs(Asm::CountingVectorAssembler &a, uint64_t *buffer)
     a.pop_reg64(RCX);
 }
 template <class WriterT>
-static void restore_all_regs(Asm::Assembler<WriterT> &a, uint64_t *buffer)
+static void restore_all_regs(Asm::Assembler<WriterT> &a, uint64_t *buffer, Asm::Register except=Asm::NOT_A_REGISTER)
 {
     using namespace Asm;
 
     a.mov_reg_imm64(RAX, PTR(buffer));
     unsigned i = 1;
     for (; i < sizeof(gp_regs) / sizeof(Register); ++i) {
-        a.mov_reg_rm64(mem_2op_short(gp_regs[i], RAX, NOT_A_REGISTER, SCALE_1, i*8));
+        if (gp_regs[i] != except)
+            a.mov_reg_rm64(mem_2op_short(gp_regs[i], RAX, NOT_A_REGISTER, SCALE_1, i*8));
     }
     a.push_reg64(RCX);
     a.mov_reg_imm64(RCX, PTR(buffer));
     a.mov_reg_rm64(mem_2op_short(RAX, RCX));
     a.pop_reg64(RCX);
+}
+
+static void print_vm_reg(RegId rid, uint64_t tagged_ptr)
+{
+    uint64_t tag = tagged_ptr & 0x0000000000000003;
+    std::printf("- REGISTER %i\n- TAG      %lli (%s)\n", (int)rid, tag, tag_name(tag));
+    if (tag == TAG_INT) {
+        std::printf("- PTR:     0x%llx\n", (unsigned long long)tagged_ptr);
+        std::printf("- VALUE:   %lli\n\n", *((long long *)(tagged_ptr & 0xFFFFFFFFFFFFFFFC)));
+    }
+    else assert(false);
+}
+template <class WriterT>
+static void emit_debug_printreg(Asm::Assembler<WriterT> &a, RegId r)
+{
+    using namespace Asm;
+
+    // Bit naughty (not good if we start using multiple threads).
+    static uint64_t regs[16];
+
+    a.mov_reg_imm32(EDI, static_cast<uint32_t>(r));
+    move_vmreg_ptr_to_guaranteed_x86reg(a, RSI, r);
+    a.mov_reg_imm64(RCX, PTR(print_vm_reg));
+    a.mov_reg_imm64(RAX, 0);
+    a.call_rm64(reg_1op(RCX));
 }
 
 namespace {
@@ -631,14 +621,13 @@ static void set_bool(Asm::Assembler<WriterT> &a, bool &var, bool tf)
 
 template <class WriterT>
 static void jump_back_setting_start_to(Asm::Assembler<WriterT> &a,
-                                       WriterT &w,
-                                       uint64_t const base_pointer_for_main_loop,
-                                       uint64_t const stack_pointer_for_main_loop,
-                                       uint64_t address_of_main_label,
-                                       uint64_t *saved_registers,
-                                       bool &registers_are_saved,
-                                       std::size_t &start,
-                                       std::size_t value)
+                                           WriterT &w,
+                                           uint64_t const base_pointer_for_main_loop,
+                                           uint64_t const stack_pointer_for_main_loop,
+                                           uint64_t *saved_registers,
+                                           bool &registers_are_saved,
+                                           std::size_t &start,
+                                           std::size_t value)
 {
     using namespace Asm;
 
@@ -650,39 +639,26 @@ static void jump_back_setting_start_to(Asm::Assembler<WriterT> &a,
     a.mov_reg_imm64(RAX, value);
     a.mov_moffs64_rax(PTR(&start));
 
-    // Do a rel32 jump to main_label.
-    uint64_t addr = w.get_start_addr() + w.size();
-    int32_t rel = (int32_t)(address_of_main_label - addr);
-    a.jmp_nr_rel32(mkdisp<int32_t>(rel, DISP_SUB_ISIZE));
+    // Restore the original base pointer and stack pointer.
+    a.mov_reg_imm64(RBP, base_pointer_for_main_loop);
+    a.mov_reg_imm64(RSP, stack_pointer_for_main_loop);
+
+    // Return from the main loop.
+    a.leave();
+    a.ret();
 }
 
-template <bool DEBUG_MODE>
-uint64_t main_loop_(std::vector<uint8_t> &instructions, std::size_t start, const std::size_t BLOB_SIZE)
+static uint64_t inner_main_loop(Vm::VectorAssemblerBroker &ab, std::vector<uint8_t> &instructions, std::size_t &start, const std::size_t BLOB_SIZE, uint64_t *saved_registers, bool &registers_are_saved, bool &exit)
 {
     using namespace Asm;
 
-    VectorWriter alaw;
-    VectorAssembler alaa(alaw);
+    if (start >= instructions.size()) {
+        exit = true;
+        return 0;
+    }
 
-    // Store the current base pointer and stack pointer.
     uint64_t base_pointer_for_main_loop;
     uint64_t stack_pointer_for_main_loop;
-    
-    uint64_t address_of_main_label;
-
-    uint64_t saved_registers[16];
-    bool registers_are_saved;
-
-    uint64_t addr;
-    int32_t rel;
-
-    typedef std::vector<uint8_t>::iterator It;
-    It i;
-
-    Vm::VectorAssemblerBroker ab(500);
-
-    // <<<<< END OF VAR DEFINITIONS <<<<<
-
     // This could just be inline ASM, but since we already have an assembler,
     // we may as well do it without making use of compiler-specific extensions.
     VectorWriter bpw;
@@ -694,52 +670,25 @@ uint64_t main_loop_(std::vector<uint8_t> &instructions, std::size_t start, const
     bpa.ret();
     bpw.get_exec_func()();
 
-    // TODO: Code duplication with test8 in asm_tests.cc
-    // Get the address of the next instruction by creating a function,
-    // calling it, and storing the return address that gets pushed onto
-    // the stack.
-    alaa.push_reg64(RBP); // Function preamble.
-    alaa.mov_reg_reg64(RBP, RSP);
-
-    alaa.mov_reg_imm64(RCX, PTR(&address_of_main_label));
-    alaa.mov_reg_rm64(mem_2op(RDX, RBP, NOT_A_REGISTER, SCALE_1, 8));
-    alaa.mov_rm64_reg(mem_2op(RDX, RCX));
-
-    alaa.leave();
-    alaa.ret();
-    alaw.get_exec_func()();
-
-    // This is the main loop. Bytecode is read in in chunks of a size determined by
-    // BLOB_SIZE. Each chunk is compiled, and ASM code is appended at the end to:
-    //
-    //     1) Save all registers. (TODO: Currently FP not saved).
-    //     2) Jump back to main_label.
-    //
-    // The jump is a relative jump, so it should be fairly fast.
-    //
-    // (Yes yes, this is horrible, just a very early prototype. The point is just
-    // that we really are doing JIT compilation here rather than AOT, although this
-    // is somewhat moot given that the compiler isn't handling jumps yet!)
-main_label:
-
-    if (start >= instructions.size())
-        return 0;
-
     VectorAssemblerBroker::Entry e = ab.get_writer_assembler_for(&*(instructions.begin() + start));
     std::printf("ASM: %llx\n", (uint64_t)e.assembler);
     CountingVectorAssembler *a = e.assembler;
     CountingVectorWriter *w = e.writer;
 
     // Makes it easier to see which ASM is for which VM instruction when debugging.
-    if (DEBUG_MODE) a->nop();
+#ifdef DEBUG
+    a->nop();
+#endif
 
     if (registers_are_saved) {
         restore_all_regs(*a, saved_registers);
     }
 
-    if (DEBUG_MODE) a->nop();
+#ifdef DEBUG
+    a->nop();
+#endif
 
-    for (i = instructions.begin() + start;
+    for (std::vector<uint8_t>::const_iterator i = instructions.begin() + start;
          i != instructions.end() && i - instructions.begin() - start < BLOB_SIZE*4;
          i += 4) {
         assert(i + 3 < instructions.end());
@@ -780,26 +729,37 @@ main_label:
             }
             else {
                 // SLOW
-                jump_back_setting_start_to(*a, *w, base_pointer_for_main_loop, stack_pointer_for_main_loop, address_of_main_label, saved_registers, registers_are_saved, start, bytecode_offset);
+                jump_back_setting_start_to(*a, *w, base_pointer_for_main_loop, stack_pointer_for_main_loop, saved_registers, registers_are_saved, start, bytecode_offset);
             }
         }
         else assert(false);
     }
 
-    jump_back_setting_start_to(*a, *w, base_pointer_for_main_loop, stack_pointer_for_main_loop, address_of_main_label, saved_registers, registers_are_saved, start, start + BLOB_SIZE * 4);
+    jump_back_setting_start_to(*a, *w, base_pointer_for_main_loop, stack_pointer_for_main_loop, saved_registers, registers_are_saved, start, start + BLOB_SIZE * 4);
 
-    if (DEBUG) {
-        std::ofstream f;
-        f.open("/tmp/vm_debug_raw", std::ios::trunc);
-        f.write(reinterpret_cast<char *>(w->get_mem(start)), w->size());
-        f.close();
-    }
+#ifdef DEBUG
+    std::ofstream f;
+    f.open("/tmp/vm_debug_raw", std::ios::trunc);
+    f.write(reinterpret_cast<char *>(w->get_mem(start)), w->size());
+    f.close();
+#endif
 
     w->get_exec_func(e.offset)();
 }
+
 uint64_t Vm::main_loop(std::vector<uint8_t> &instructions, std::size_t start, const std::size_t BLOB_SIZE)
-{ main_loop_<false>(instructions, start, BLOB_SIZE); }
-uint64_t Vm::main_loop_debug(std::vector<uint8_t> &instructions, std::size_t start, const std::size_t BLOB_SIZE)
-{ main_loop_<true>(instructions, start, BLOB_SIZE); }
+{
+    VectorAssemblerBroker ab(2 << 12);
+
+    uint64_t saved_registers[16];
+    bool registers_are_saved = false;
+
+    bool exit = false;
+    uint64_t r;
+    while (! exit)
+        r = inner_main_loop(ab, instructions, start, BLOB_SIZE, saved_registers, registers_are_saved, exit);
+    return r;
+}
+
 
 
