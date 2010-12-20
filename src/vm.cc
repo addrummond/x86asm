@@ -15,7 +15,8 @@
 // * R10-R15 hold the first 8 registers.
 //
 
-const Asm::Register vm_regs_x86_regs[] = { Asm::R11D, Asm::R12D, Asm::R13D, Asm::R14D, Asm::R15D };
+// TODO: Figure out why using R11D and R12D causes problems.
+const Asm::Register vm_regs_x86_regs[] = { Asm::RBX, Asm::R13D, Asm::R14D, Asm::R15D };
 const int NUM_VM_REGS_IN_X86_REGS = sizeof(vm_regs_x86_regs)/sizeof(Asm::Register);
 
 using namespace Vm;
@@ -573,7 +574,7 @@ static void restore_all_regs(Asm::Assembler<WriterT> &a, uint64_t *buffer, Asm::
 // Save those registers which
 //     (i)  belong to the caller according to the X86-64 ABI.
 //     (ii) are used to hold VM registers.
-static Asm::Register registers_to_save[] = { Asm::R11D };
+static Asm::Register registers_to_save[] = { Asm::RBX };
 //static Asm::Register registers_to_save[] = { /*Asm::RAX,*/ Asm::RCX, Asm::RDX, Asm::RBX, Asm::RSP, Asm::RBP, Asm::RSI, Asm::RDI, Asm::R8D, Asm::R9D, Asm::R10D, Asm::R11D, Asm::R12D, Asm::R13D, Asm::R14D, Asm::R15D };
 template <class WriterT>
 static void save_regs_before_c_funcall(Asm::Assembler<WriterT> &a)
