@@ -25,19 +25,22 @@ enum Opcode {
     OP_RET     = 9,
     OP_CMP     = 10,
     OP_JE      = 11,
-    OP_JG      = 12,
-    OP_JL      = 13,
+    OP_CJE     = 12,
+    OP_JG      = 13,
+    OP_CJG     = 14,
+    OP_JL      = 15,
+    OP_CJL     = 16,
 
-    OP_IADD    = 14,
-    OP_IMUL    = 15,
-    OP_IDIV    = 16,
+    OP_IADD    = 17,
+    OP_IMUL    = 18,
+    OP_IDIV    = 19,
 
-    OP_MKVEC   = 17,
-    OP_REVEC   = 18,
-    OP_REFVEC  = 19,
-    OP_SETVEC  = 20,
+    OP_MKVEC   = 20,
+    OP_REVEC   = 21,
+    OP_REFVEC  = 21,
+    OP_SETVEC  = 23,
 
-    OP_DEBUG_PRINTREG = 21
+    OP_DEBUG_PRINTREG = 24
 };
 extern const Opcode FIRST_OP;
 

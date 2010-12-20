@@ -40,8 +40,11 @@ static char const *op_names[] = {
     "RET",
     "CMP",
     "JE",
+    "CJE",
     "JG",
+    "CJG",
     "JL",
+    "CJL",
     "IADD",
     "IMUL",
     "IDIV",
@@ -62,13 +65,16 @@ static Operand const op_operand_specs[][4] = {
     { OPR_IMM64, END },                             // LDI64
 
     { OPR_REGISTER, OPR_FLAGS, END },               // JMP
-    { OPR_IMM16, END },                             // CJMP
+    { OPR_IMM16, OPR_FLAGS, END },                  // CJMP
     { OPR_REGISTER, END },                          // CALL
     { OPR_REGISTER, END },                          // RET
-    { OPR_REGISTER, OPR_REGISTER, OPR_FLAGS, END }, // CMP
+    { OPR_REGISTER, OPR_REGISTER, END },            // CMP
     { OPR_REGISTER, END },                          // JE
+    { OPR_IMM16, END },                             // CJE
     { OPR_REGISTER, END },                          // JG
+    { OPR_IMM16, END },                             // CJG
     { OPR_REGISTER, END },                          // JL
+    { OPR_IMM16, END },                             // CJL
 
     { OPR_REGISTER, OPR_REGISTER, END },            // IADD
     { OPR_REGISTER, OPR_REGISTER, END },            // IMUL
@@ -470,6 +476,15 @@ static void emit_ldi(Asm::Assembler<WriterT> &a, RegId ptr_dest, uint64_t val)
 }
 
 template <class WriterT>
+static void emit_cmp(Asm::Assembler<WriterT> &a, RegId op1, RegId op2)
+{
+    using namespace Asm;
+    Register r1 = move_vmreg_ptr_to_x86reg(a, RDX, op1);
+    Register r2 = move_vmreg_ptr_to_x86reg(a, RCX, op2);
+    a.cmp_rm64_reg(reg_2op(r2, r1));
+}
+
+template <class WriterT>
 static void emit_iadd(Asm::Assembler<WriterT> &a, RegId r_dest, RegId r_src)
 {
     using namespace Asm;
@@ -730,6 +745,12 @@ static uint64_t inner_main_loop(Vm::VectorAssemblerBroker &ab, std::vector<uint8
         else if (*i == OP_LDI16) {
             emit_ldi(*a, i[1], i[2] + (i[3] << 8));
         }
+        else if (*i == OP_CMP) {
+            emit_cmp(*a, i[1], i[2]);
+        }
+//        else if (*i == OP_JE) {
+//            emit_je(*a, i[1], i[2]);
+//        }
         else if (*i == OP_IADD) {
             emit_iadd(*a, i[1], i[2]);
         }
