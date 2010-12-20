@@ -12,7 +12,7 @@
 // Register scheme.
 //
 // * GP registers are volatile scratch registers.
-// * R8-R15 hold the first 8 registers.
+// * R10-R15 hold the first 8 registers.
 //
 
 const Asm::Register vm_regs_x86_regs[] = { Asm::R10D, Asm::R11D, Asm::R12D, Asm::R13D, Asm::R14D, Asm::R15D };
@@ -388,7 +388,7 @@ static void move_x86reg_to_vmreg_ptr(Asm::Assembler<WriterT> &a, RegId vmreg, As
 {
     using namespace Asm;
     if (vmreg <= NUM_VM_REGS_IN_X86_REGS)
-        a.mov_reg_reg64(static_cast<Register>(vm_regs_x86_regs[vmreg - 1]), x86reg);
+        a.mov_reg_reg64(vm_regs_x86_regs[vmreg - 1], x86reg);
     else
         a.mov_rm64_reg(mem_2op_short(x86reg, RBP, NOT_A_REGISTER/*index*/, SCALE_1, RegId_to_disp(vmreg)));
 }
@@ -398,7 +398,7 @@ static Asm::Register move_vmreg_ptr_to_x86reg(Asm::Assembler<WriterT> &a, Asm::R
 {
     using namespace Asm;
     if (vmreg <= NUM_VM_REGS_IN_X86_REGS)
-        return static_cast<Register>(vm_regs_x86_regs[vmreg - 1]);
+        return vm_regs_x86_regs[vmreg - 1];
     a.mov_reg_rm64(mem_2op_short(x86reg, RBP, NOT_A_REGISTER/*index*/, SCALE_1, RegId_to_disp(vmreg)));
     return x86reg;
 }
@@ -408,7 +408,7 @@ static void move_vmreg_ptr_to_guaranteed_x86reg(Asm::Assembler<WriterT> &a, Asm:
 {
     using namespace Asm;
     if (vmreg <= NUM_VM_REGS_IN_X86_REGS)
-        a.mov_reg_reg64(x86reg, static_cast<Register>(vm_regs_x86_regs[vmreg - 1]));
+        a.mov_reg_reg64(x86reg, vm_regs_x86_regs[vmreg - 1]);
     else
         a.mov_reg_rm64(mem_2op_short(x86reg, RBP, NOT_A_REGISTER/*index*/, SCALE_1, RegId_to_disp(vmreg)));
 }
@@ -471,9 +471,7 @@ static void emit_iadd(Asm::Assembler<WriterT> &a, RegId r_dest, RegId r_src)
     using namespace Asm;
     Register r1 = move_vmreg_ptr_to_x86reg(a, RDX, r_dest);
     Register r2 = move_vmreg_ptr_to_x86reg(a, RCX, r_src);
-//    emit_debug_printreg(a, 2);
     a.mov_reg_rm64(mem_2op(RAX, r1));
-//    emit_debug_printreg(a, 2);
     a.add_reg_rm64(mem_2op(RAX, r2));
     a.mov_rm64_reg(mem_2op(RAX, r1));
 }
@@ -498,7 +496,7 @@ static void emit_exit(Asm::Assembler<WriterT> &a, uint64_t const &bpfml, uint64_
 {
     using namespace Asm;
 
-    move_vmreg_ptr_to_x86reg(a, RAX, retreg);
+    move_vmreg_ptr_to_guaranteed_x86reg(a, RAX, retreg);
 
     // Restore RBP and RSP.
     a.mov_reg_imm64(RCX, PTR(&bpfml));
@@ -659,7 +657,6 @@ static uint64_t inner_main_loop(Vm::VectorAssemblerBroker &ab, std::vector<uint8
     bpw.get_exec_func()();
 
     VectorAssemblerBroker::Entry e = ab.get_writer_assembler_for(&*(instructions.begin() + start));
-    std::printf("ASM: %llx\n", (uint64_t)e.assembler);
     CountingVectorAssembler *a = e.assembler;
     CountingVectorWriter *w = e.writer;
 
@@ -676,10 +673,13 @@ static uint64_t inner_main_loop(Vm::VectorAssemblerBroker &ab, std::vector<uint8
     a->nop();
 #endif
 
+    bool last_instruction_exited = false;
     for (std::vector<uint8_t>::const_iterator i = instructions.begin() + start;
          i != instructions.end() && i - instructions.begin() - start < BLOB_SIZE*4;
          i += 4) {
         assert(i + 3 < instructions.end());
+
+        last_instruction_exited = false;
 
         // If this bit of the code is jumped to, cache the location of the generated assembly.
         if (i[3] & FLAG_DESTINATION >> 24)
@@ -688,6 +688,7 @@ static uint64_t inner_main_loop(Vm::VectorAssemblerBroker &ab, std::vector<uint8
         if (*i == OP_NULL)
             assert(false);
         else if (*i == OP_EXIT) {
+            last_instruction_exited = true;
             emit_exit(*a, base_pointer_for_main_loop, stack_pointer_for_main_loop, exit, i[1]);
         }
         else if (*i == OP_INCRW) {
@@ -723,7 +724,8 @@ static uint64_t inner_main_loop(Vm::VectorAssemblerBroker &ab, std::vector<uint8
         else assert(false);
     }
 
-    jump_back_setting_start_to(*a, *w, base_pointer_for_main_loop, stack_pointer_for_main_loop, saved_registers, registers_are_saved, start, start + BLOB_SIZE * 4);
+    if (! last_instruction_exited)
+        jump_back_setting_start_to(*a, *w, base_pointer_for_main_loop, stack_pointer_for_main_loop, saved_registers, registers_are_saved, start, start + BLOB_SIZE * 4);
 
 #ifdef DEBUG
     std::ofstream f;
@@ -733,6 +735,8 @@ static uint64_t inner_main_loop(Vm::VectorAssemblerBroker &ab, std::vector<uint8
 #endif
 
     w->get_exec_func(e.offset)();
+
+    return 0;
 }
 
 uint64_t Vm::main_loop(std::vector<uint8_t> &instructions, std::size_t start, const std::size_t BLOB_SIZE)
@@ -743,7 +747,7 @@ uint64_t Vm::main_loop(std::vector<uint8_t> &instructions, std::size_t start, co
     bool registers_are_saved = false;
 
     bool exit = false;
-    uint64_t r;
+    uint64_t r = 0;
     while (! exit)
         r = inner_main_loop(ab, instructions, start, BLOB_SIZE, saved_registers, registers_are_saved, exit);
     return r;

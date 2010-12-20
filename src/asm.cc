@@ -107,7 +107,6 @@ static RawModrmSib raw_modrmsib(ModrmSib const &modrmsib)
                             modrmsib.reg != NOT_A_REGISTER ? register_code(modrmsib.reg) : 0);
         r.sib = 0;
         r.has_disp = modrmsib.disp_size != DISP_SIZE_NONE;
-//        std::printf("\n\n%x\n\n", (int)(r.modrm));
         return r;
     }
 
@@ -116,7 +115,8 @@ static RawModrmSib raw_modrmsib(ModrmSib const &modrmsib)
          mod = 3;
          r.has_disp = false;
     }
-    else if ((modrmsib.disp == 0 && modrmsib.rm_reg != RBP && modrmsib.rm_reg != RSP) || modrmsib.rm_reg == NOT_A_REGISTER) {
+    else if ((modrmsib.disp == 0 && modrmsib.rm_reg != RBP && modrmsib.rm_reg != RSP && modrmsib.rm_reg != R12D && modrmsib.rm_reg != R13D) ||
+             modrmsib.rm_reg == NOT_A_REGISTER) {
         mod = 0;
         r.has_disp = false;
     }
@@ -157,7 +157,7 @@ static RawModrmSib raw_modrmsib(ModrmSib const &modrmsib)
         if (modrmsib.base_reg == NOT_A_REGISTER)
             sib_rm = 4;
         else {
-            assert(is_gp3264_register(modrmsib.rm_reg) && modrmsib.rm_reg != RSP);
+            assert(is_gp3264_register(modrmsib.rm_reg) && modrmsib.rm_reg != RSP && modrmsib.rm_reg != R13D);
             sib_rm = register_code(modrmsib.rm_reg);
         }
         // Set reg (base).
