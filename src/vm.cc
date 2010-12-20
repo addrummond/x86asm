@@ -15,6 +15,9 @@
 // * R8-R15 hold the first 8 registers.
 //
 
+const Asm::Register vm_regs_x86_regs[] = { Asm::R10D, Asm::R11D, Asm::R12D, Asm::R13D, Asm::R14D, Asm::R15D };
+const int NUM_VM_REGS_IN_X86_REGS = sizeof(vm_regs_x86_regs)/sizeof(Asm::Register);
+
 using namespace Vm;
 
 const Opcode Vm::FIRST_OP = OP_EXIT;
@@ -374,8 +377,6 @@ Vm::VectorAssemblerBroker::Entry const *Vm::VectorAssemblerBroker::known_to_be_l
         return NULL;
 }
 
-const int NUM_VM_REGS_IN_X86_REGS = 0;
-
 static int8_t RegId_to_disp(RegId id)
 {
     assert(id <= 127 && id > NUM_VM_REGS_IN_X86_REGS);
@@ -387,7 +388,7 @@ static void move_x86reg_to_vmreg_ptr(Asm::Assembler<WriterT> &a, RegId vmreg, As
 {
     using namespace Asm;
     if (vmreg <= NUM_VM_REGS_IN_X86_REGS)
-        a.mov_reg_reg64(static_cast<Register>(R8D + vmreg - 1), x86reg);
+        a.mov_reg_reg64(static_cast<Register>(vm_regs_x86_regs[vmreg - 1]), x86reg);
     else
         a.mov_rm64_reg(mem_2op_short(x86reg, RBP, NOT_A_REGISTER/*index*/, SCALE_1, RegId_to_disp(vmreg)));
 }
@@ -397,7 +398,7 @@ static Asm::Register move_vmreg_ptr_to_x86reg(Asm::Assembler<WriterT> &a, Asm::R
 {
     using namespace Asm;
     if (vmreg <= NUM_VM_REGS_IN_X86_REGS)
-        return static_cast<Register>(R8D + vmreg - 1);
+        return static_cast<Register>(vm_regs_x86_regs[vmreg - 1]);
     a.mov_reg_rm64(mem_2op_short(x86reg, RBP, NOT_A_REGISTER/*index*/, SCALE_1, RegId_to_disp(vmreg)));
     return x86reg;
 }
@@ -407,7 +408,7 @@ static void move_vmreg_ptr_to_guaranteed_x86reg(Asm::Assembler<WriterT> &a, Asm:
 {
     using namespace Asm;
     if (vmreg <= NUM_VM_REGS_IN_X86_REGS)
-        a.mov_reg_reg64(x86reg, static_cast<Register>(R8D + vmreg - 1));
+        a.mov_reg_reg64(x86reg, static_cast<Register>(vm_regs_x86_regs[vmreg - 1]));
     else
         a.mov_reg_rm64(mem_2op_short(x86reg, RBP, NOT_A_REGISTER/*index*/, SCALE_1, RegId_to_disp(vmreg)));
 }
