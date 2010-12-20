@@ -8,6 +8,13 @@
 #include <iostream>
 #include <fstream>
 
+//
+// Register scheme.
+//
+// * GP registers are volatile scratch registers.
+// * R8-R15 hold the first 8 registers.
+//
+
 using namespace Vm;
 
 const Opcode Vm::FIRST_OP = OP_EXIT;
@@ -91,6 +98,7 @@ char const *Vm::tag_name(unsigned tag)
         case TAG_INT: return "int";
         case TAG_DOUBLE: return "double";
         case TAG_VECTOR: return "vector";
+        default: assert(false);
     }
 }
 
@@ -388,27 +396,48 @@ Vm::VectorAssemblerBroker::Entry const *Vm::VectorAssemblerBroker::known_to_be_l
         return NULL;
 }
 
-// Addresses of some functions we'll want to call.
-static const uint64_t malloc_ptr = reinterpret_cast<uint64_t>(std::malloc);
-
 static int8_t RegId_to_disp(RegId id)
 {
-    assert(id <= 127 && id > 0);
-    return id * -8;
+    assert(id <= 127 && id > 8);
+    return (id-8) * -8;
 }
 
 template <class WriterT>
-static void move_x86reg_to_vmreg_ptr(Asm::Assembler<WriterT> &a, Asm::Register x86reg, RegId vmreg)
+static void move_x86reg_to_vmreg_ptr(Asm::Assembler<WriterT> &a, RegId vmreg, Asm::Register x86reg)
 {
     using namespace Asm;
-    a.mov_rm64_reg(mem_2op_short(x86reg, RBP, NOT_A_REGISTER/*index*/, SCALE_1, RegId_to_disp(vmreg)));
+    if (vmreg <= 8)
+        a.mov_reg_reg64(static_cast<Register>(R8D + vmreg - 1), x86reg);
+    else
+        a.mov_rm64_reg(mem_2op_short(x86reg, RBP, NOT_A_REGISTER/*index*/, SCALE_1, RegId_to_disp(vmreg)));
 }
 
 template <class WriterT>
-static void move_vmreg_ptr_to_x86reg(Asm::Assembler<WriterT> &a, RegId vmreg, Asm::Register x86reg)
+static Asm::Register move_vmreg_ptr_to_x86reg(Asm::Assembler<WriterT> &a, Asm::Register x86reg, RegId vmreg)
 {
     using namespace Asm;
+    if (vmreg <= 8)
+        return static_cast<Register>(R8D + vmreg - 1);
     a.mov_reg_rm64(mem_2op_short(x86reg, RBP, NOT_A_REGISTER/*index*/, SCALE_1, RegId_to_disp(vmreg)));
+}
+
+template <class WriterT>
+static void move_vmreg_ptr_to_guaranteed_x86reg(Asm::Assembler<WriterT> &a, Asm::Register x86reg, RegId vmreg)
+{
+    using namespace Asm;
+    if (vmreg <= 8)
+        a.mov_reg_reg64(x86reg, static_cast<Register>(R8D + vmreg - 1));
+    else
+        a.mov_reg_rm64(mem_2op_short(x86reg, RBP, NOT_A_REGISTER/*index*/, SCALE_1, RegId_to_disp(vmreg)));
+}
+
+static void *my_malloc(size_t bytes)
+{
+    void *r = std::malloc(bytes);
+#ifdef DEBUG
+//   std::printf("MALLOC CALLED: 0x%llx\n", (unsigned long long)r);
+#endif
+    return r;
 }
 
 // Emit code to allocate tagged memory.
@@ -421,7 +450,7 @@ static void emit_malloc_constsize(Asm::Assembler<WriterT> &a, std::size_t size, 
     assert(tag < 4);
 
     a.mov_reg_imm64(RDI, static_cast<uint64_t>(size));
-    a.mov_reg_imm64(RCX, static_cast<uint64_t>(malloc_ptr));
+    a.mov_reg_imm64(RCX, (uint64_t)my_malloc);
     a.mov_reg_imm64(RAX, 0);
     a.call_rm64(reg_1op(RCX));
 
@@ -431,7 +460,7 @@ static void emit_malloc_constsize(Asm::Assembler<WriterT> &a, std::size_t size, 
     a.mov_reg_imm64(RCX, static_cast<uint64_t>(tag));
     a.or_reg_rm64(reg_2op(RCX, RAX));
 
-    move_x86reg_to_vmreg_ptr(a, RCX, ptr_dest);
+    move_x86reg_to_vmreg_ptr(a, ptr_dest, RCX);
 }
 
 template <class WriterT>
@@ -441,7 +470,8 @@ static void emit_incrw(Asm::Assembler<WriterT> &a, RegId num_regs)
     a.call_rel32(0);
     a.push_rm64(reg_1op(RBP));
     a.mov_rm64_reg(reg_2op(RSP, RBP));
-    a.sub_rm64_imm8(reg_1op(RBP), num_regs * 8);
+    if (num_regs > 8)
+        a.sub_rm64_imm8(reg_1op(RBP), (num_regs - 8) * 8);
 }
 
 template <class WriterT>
@@ -457,11 +487,13 @@ template <class WriterT>
 static void emit_iadd(Asm::Assembler<WriterT> &a, RegId r_dest, RegId r_src)
 {
     using namespace Asm;
-    a.mov_reg_rm64(mem_2op_short(RDX, RBP, NOT_A_REGISTER/*index*/, SCALE_1, RegId_to_disp(r_dest)));
-    a.mov_reg_rm64(mem_2op_short(RCX, RBP, NOT_A_REGISTER/*index*/, SCALE_1, RegId_to_disp(r_src)));
-    a.mov_reg_rm64(mem_2op(RAX, RDX));
-    a.add_reg_rm64(mem_2op(RAX, RCX));
-    a.mov_rm64_reg(mem_2op(RAX, RDX));
+    Register r1 = move_vmreg_ptr_to_x86reg(a, RDX, r_dest);
+    Register r2 = move_vmreg_ptr_to_x86reg(a, RCX, r_src);
+//    emit_debug_printreg(a, 2);
+    a.mov_reg_rm64(mem_2op(RAX, r1));
+//    emit_debug_printreg(a, 2);
+    a.add_reg_rm64(mem_2op(RAX, r2));
+    a.mov_rm64_reg(mem_2op(RAX, r1));
 }
 
 template <class WriterT>
@@ -469,8 +501,9 @@ static void emit_exit(Asm::Assembler<WriterT> &a, uint64_t const &bpfml, uint64_
 {
     using namespace Asm;
 
-    a.mov_reg_rm64(mem_2op_short(RAX, RBP, NOT_A_REGISTER/*index*/, SCALE_1, RegId_to_disp(retreg)));
+    move_vmreg_ptr_to_x86reg(a, RAX, retreg);
 
+    // Restore RBP and RSP.
     a.mov_reg_imm64(RCX, PTR(&bpfml));
     a.mov_reg_rm64(mem_2op(RBP, RCX));
     a.mov_reg_imm64(RCX, PTR(&spfml));
@@ -485,7 +518,18 @@ static void print_vm_reg(RegId rid, uint64_t tagged_ptr)
     uint64_t tag = tagged_ptr & 0x0000000000000003;
     std::printf("- REGISTER %i\n- TAG      %lli (%s)\n", (int)rid, tag, tag_name(tag));
     if (tag == TAG_INT) {
-        std::printf("- VALUE:   %lli\n\n", *((long long *)(tagged_ptr)));
+        std::printf("- PTR:     0x%llx\n", (unsigned long long)tagged_ptr);
+        std::printf("- VALUE:   %lli\n\n", *((long long *)(tagged_ptr & 0xFFFFFFFFFFFFFFFC)));
+    }
+    else assert(false);
+}
+static void print_vm_reg2(RegId rid, uint64_t tagged_ptr)
+{
+    uint64_t tag = tagged_ptr & 0x0000000000000003;
+    std::printf("- REGISTER %i\n- TAG      %lli (%s)\n", (int)rid, tag, tag_name(tag));
+    if (tag == TAG_INT) {
+        std::printf("- PTR:     0x%llx\n", (unsigned long long)tagged_ptr);
+        std::printf("- VALUE:   %lli\n\n", *((long long *)(tagged_ptr & 0xFFFFFFFFFFFFFFFC)));
     }
     else assert(false);
 }
@@ -495,7 +539,12 @@ static void emit_debug_printreg(Asm::Assembler<WriterT> &a, RegId r)
 {
     using namespace Asm;
     a.mov_reg_imm32(EDI, static_cast<uint32_t>(r));
-    a.mov_reg_rm64(mem_2op_short(RSI, RBP, NOT_A_REGISTER/*index*/, SCALE_1, RegId_to_disp(r)));
+    move_vmreg_ptr_to_guaranteed_x86reg(a, RSI, r);
+    a.mov_reg_imm64(RCX, PTR(print_vm_reg2));
+    a.mov_reg_imm64(RAX, 0);
+    a.call_rm64(reg_1op(RCX));
+    a.mov_reg_imm32(EDI, static_cast<uint32_t>(r));
+    move_vmreg_ptr_to_guaranteed_x86reg(a, RSI, r);
     a.mov_reg_imm64(RCX, PTR(print_vm_reg));
     a.call_rm64(reg_1op(RCX));
 }
@@ -510,7 +559,7 @@ static void debug_print_x86reg64(Asm::Assembler<WriterT> &a, Asm::Register r, co
     a.push_reg64(r);
     a.mov_reg_imm64(RDI, PTR(format));
     a.mov_reg_imm64(RSI, PTR(preamble));
-    a.mov_reg_reg(RBX, RSP);
+    a.mov_reg_reg64(RBX, RSP);
     a.mov_reg_rm64(mem_2op_short(RDX, RBX));
     a.mov_reg_imm64(RCX, PTR(std::printf));
     a.mov_reg_imm32(EAX, 0);
@@ -577,7 +626,7 @@ static void set_bool(Asm::Assembler<WriterT> &a, bool &var, bool tf)
 
     a.mov_reg_imm64(RCX, PTR(&var));
     a.mov_reg_imm64(RAX, tf ? 1 : 0);
-    ASM<WriterT, sizeof(bool)>::mov_rmX_reg(a, mem_2op(AL, RCX));
+    ASM<WriterT, sizeof(bool)*8>::mov_rmX_reg(a, mem_2op(AL, RCX));
 }
 
 template <class WriterT>
@@ -648,7 +697,7 @@ uint64_t main_loop_(std::vector<uint8_t> &instructions, std::size_t start, const
     // calling it, and storing the return address that gets pushed onto
     // the stack.
     alaa.push_reg64(RBP); // Function preamble.
-    alaa.mov_reg_reg(RBP, RSP);
+    alaa.mov_reg_reg64(RBP, RSP);
 
     alaa.mov_reg_imm64(RCX, PTR(&address_of_main_label));
     alaa.mov_reg_rm64(mem_2op(RDX, RBP, NOT_A_REGISTER, SCALE_1, 8));
@@ -679,9 +728,14 @@ main_label:
     CountingVectorAssembler *a = e.assembler;
     CountingVectorWriter *w = e.writer;
 
+    // Makes it easier to see which ASM is for which VM instruction when debugging.
+    if (DEBUG_MODE) a->nop();
+
     if (registers_are_saved) {
         restore_all_regs(*a, saved_registers);
     }
+
+    if (DEBUG_MODE) a->nop();
 
     for (i = instructions.begin() + start;
          i != instructions.end() && i - instructions.begin() - start < BLOB_SIZE*4;
@@ -728,12 +782,16 @@ main_label:
             }
         }
         else assert(false);
-
-        // Makes it easier to see which ASM is for which VM instruction when debugging.
-        if (DEBUG_MODE) a->nop();
     }
 
     jump_back_setting_start_to(*a, *w, address_of_main_label, saved_registers, registers_are_saved, start, start + BLOB_SIZE * 4);
+
+    if (DEBUG) {
+        std::ofstream f;
+        f.open("/tmp/vm_debug_raw", std::ios::trunc);
+        f.write(reinterpret_cast<char *>(w->get_mem(start)), w->size());
+        f.close();
+    }
 
     w->get_exec_func(e.offset)();
 }

@@ -130,7 +130,7 @@ static RawModrmSib raw_modrmsib(ModrmSib const &modrmsib)
     else if (modrmsib.rm_reg == NOT_A_REGISTER)
         rm = 5;
     else {
-        assert(is_gp3264_register(modrmsib.rm_reg) && modrmsib.rm_reg != RSP);
+        assert(is_gp3264_register(modrmsib.rm_reg) && (modrmsib.rm_reg != RSP || mod == 3));
         rm = register_code(modrmsib.rm_reg);
     }
     // Set reg.
@@ -279,7 +279,7 @@ static uint8_t compute_rex(ModrmSib const &modrmsib, Size size) // Returns 0 if 
     if (size == SIZE_64)
         rex |= REX_W;
 
-    if (requires_sib(modrmsib)) {//modrmsib.disp_size == DISP_SIZE_NONE || modrmsib.scale == SCALE_1) {
+    if (! requires_sib(modrmsib)) {//modrmsib.disp_size == DISP_SIZE_NONE || modrmsib.scale == SCALE_1) {
         // No SIB.
         if (modrmsib.rm_reg >= R8D && modrmsib.rm_reg <= R15D)
             rex |= REX_B;
@@ -287,6 +287,7 @@ static uint8_t compute_rex(ModrmSib const &modrmsib, Size size) // Returns 0 if 
             rex |= REX_R;
     }
     else {
+        // Yes SIB.
         if (modrmsib.rm_reg >= R8D && modrmsib.rm_reg <= R15D)
             rex |= REX_X;
         if (modrmsib.reg >= R8D && modrmsib.reg <= R15D)
@@ -907,19 +908,6 @@ void Asm::Assembler<WriterT>::leave() {
 // MOV
 //
 
-template <class WriterT>
-void Asm::Assembler<WriterT>::mov_reg_reg(Register reg_dest, Register reg_src)
-{
-    assert(register_byte_size(reg_dest) == register_byte_size(reg_src) &&
-           is_gp3264_register(reg_dest) && is_gp3264_register(reg_src));
-    RRC(reg_dest, rex, rcode_dest);
-    uint8_t rcode_src = register_code(reg_src);
-
-    ABIFNZ(rex);
-    AB(0x89);
-    AB(reg_reg_modrm(reg_src, reg_dest));
-}
-
 template <class WriterT, uint8_t OPCODE, Size RM_SIZE>
 static void mov_rm_reg_(WriterT &w, ModrmSib const &modrmsib)
 {
@@ -1148,9 +1136,9 @@ void Asm::VectorWriter::canonical_hex(std::string &o)
     Util::hex_dump(mem, length - freebytes, o);
 }
 
-void Asm::VectorWriter::debug_print()
+void Asm::VectorWriter::debug_print(std::size_t offset)
 {
-    Util::debug_hex_print(mem, length - freebytes);
+    Util::debug_hex_print(mem + offset, length - freebytes - offset);
 }
 
 uint8_t *Asm::VectorWriter::get_mem(int64_t offset)

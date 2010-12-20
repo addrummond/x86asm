@@ -26,7 +26,7 @@ void test1()
     // PUSH RBP
     a.push_reg64(RBP);
     // MOV RBP, RSP
-    a.mov_reg_reg(RBP, RSP);
+    a.mov_reg_reg64(RBP, RSP);
     // MOV RAX, 2
     a.mov_reg_imm64(RAX, 1);
     // MOV RDX, 2
@@ -35,10 +35,10 @@ void test1()
     a.imul_reg_rm64(reg_2op(RAX, RDX));
     a.imul_reg_rm64(reg_2op(RAX, RDX));
     // MOV RDX, RAX
-    a.mov_reg_reg(RDX, RAX);
+    a.mov_reg_reg64(RDX, RAX);
     // INC RDX
     a.inc_reg64(RDX);
-    // MOV RAX, RDX {could have used mov_reg_reg here instead}
+    // MOV RAX, RDX {could have used mov_reg_reg64 here instead}
     a.mov_rm64_reg(reg_2op(RDX, RAX));
     // MOV RBX, [imm64 -- address of 'foo']
     a.mov_reg_imm64(RBX, PTR(&foo));
@@ -217,7 +217,7 @@ void test5()
     VectorAssembler a(w);
 
     a.push_reg64(RBP); // Function preamble (unnecessary since this func doesn't take any args).
-    a.mov_reg_reg(RBP, RSP);
+    a.mov_reg_reg64(RBP, RSP);
 
     // <<<<< start of args passed in registers (= all of them).
     a.mov_reg_imm64(RDI, PTR(fstring));
@@ -255,7 +255,7 @@ void test6()
     uint64_t val;
 
     a.push_reg64(RBP); // Function preamble.
-    a.mov_reg_reg(RBP, RSP);
+    a.mov_reg_reg64(RBP, RSP);
 
     a.call_rel32(2);
     a.leave(); // 1 byte
@@ -290,7 +290,7 @@ void test7()
     VectorAssembler a(w);
 
     a.push_reg64(RBP); // Function preamble.
-    a.mov_reg_reg(RBP, RSP);
+    a.mov_reg_reg64(RBP, RSP);
     std::size_t b4 = w.size();
     a.mov_reg_imm64(RCX, PTR(&val));
     a.inc_rm64(mem_1op(RCX));
@@ -346,7 +346,7 @@ getaddr:
     // calling it, and storing the return address that gets pushed onto
     // the stack.
     alaa.push_reg64(RBP); // Function preamble.
-    alaa.mov_reg_reg(RBP, RSP);
+    alaa.mov_reg_reg64(RBP, RSP);
 
     alaa.mov_reg_imm64(RCX, PTR(&after_label_address));
     alaa.mov_reg_rm64(mem_2op(RDX, RBP, NOT_A_REGISTER, SCALE_1, 8));

@@ -412,12 +412,6 @@ public:
     void leave();
 
     // MOV
-    void mov_reg_reg(Register dest, Register src); // Provided because ordering of args
-                                                   // can be confusing if mov_rm_reg is
-                                                   // used to move one reg to another,
-                                                   // and because the modrm byte can be
-                                                   // computed using simpler code in this
-                                                   // case.
     void mov_rm8_reg(ModrmSib const &modrmsib);
     void mov_rm32_reg(ModrmSib const &modrmsib);
     void mov_rm64_reg(ModrmSib const &modrmsib);
@@ -427,6 +421,9 @@ public:
     void mov_reg_imm32(Register reg, uint32_t imm);
     void mov_reg_imm64(Register reg, uint64_t imm);
     void mov_moffs64_rax(uint64_t addr);
+    void mov_reg_reg8(Register dest, Register src) { mov_reg_rm8(reg_2op(dest, src)); }
+    void mov_reg_reg32(Register dest, Register src) { mov_reg_rm32(reg_2op(dest, src)); }
+    void mov_reg_reg64(Register dest, Register src) { mov_reg_rm64(reg_2op(dest, src)); }
 
     // MUL
     void mul_edx_eax_rm32(ModrmSib const &modrmsib);
@@ -499,7 +496,7 @@ public:
     std::size_t size() const;
 
     void canonical_hex(std::string &o);
-    void debug_print();
+    void debug_print(std::size_t offset=0);
 
     typedef void (*voidf)(void);
     uint8_t *get_mem(int64_t offset=0);
