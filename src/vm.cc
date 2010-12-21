@@ -680,7 +680,14 @@ static void jump_back_setting_start_to(Asm::Assembler<WriterT> &a,
     a.ret();
 }
 
-static uint64_t inner_main_loop(Vm::VectorAssemblerBroker &ab, std::vector<uint8_t> &instructions, std::size_t &start, const std::size_t BLOB_SIZE, uint64_t *saved_registers, bool &registers_are_saved, bool &exit)
+static uint64_t inner_main_loop(Vm::VectorAssemblerBroker &ab,
+                                std::vector<uint8_t> &instructions,
+                                std::size_t &start,
+                                std::vector<uint8_t>::const_iterator &position_of_last_incrw,
+                                const std::size_t BLOB_SIZE,
+                                uint64_t *saved_registers,
+                                bool &registers_are_saved,
+                                bool &exit)
 {
     using namespace Asm;
 
@@ -740,6 +747,7 @@ static uint64_t inner_main_loop(Vm::VectorAssemblerBroker &ab, std::vector<uint8
         }
         else if (*i == OP_INCRW) {
             emit_incrw(*a, i[1]);
+            position_of_last_incrw = i;
             current_num_vm_registers = i[1];
         }
         else if (*i == OP_LDI16) {
@@ -768,6 +776,12 @@ static uint64_t inner_main_loop(Vm::VectorAssemblerBroker &ab, std::vector<uint8
             // created/deleted at the same time as the ASM code for the target, so we can make the jump
             // directly rather than going via the main JIT loop (much faster).
             if (VectorAssemblerBroker::Entry const *je = ab.known_to_be_local(&*(instructions.begin() + start), &*(instructions.begin() + bytecode_offset))) {
+                // Check if it's in the same stack frame.
+                if (! (instructions.begin() + bytecode_offset > position_of_last_incrw)) {
+                    // TODO: Implement.
+                    assert(false);
+                }
+
                 // FAST(er)
                 uint64_t current_addr = w->get_start_addr() + w->size();
                 uint64_t target_addr = je->writer->get_start_addr(je->offset);
@@ -812,10 +826,11 @@ uint64_t Vm::main_loop(std::vector<uint8_t> &instructions, std::size_t start, co
     uint64_t saved_registers[16];
     bool registers_are_saved = false;
 
+    std::vector<uint8_t>::const_iterator position_of_last_incrw = instructions.begin() + start;
     bool exit = false;
     uint64_t r = 0;
     while (! exit)
-        r = inner_main_loop(ab, instructions, start, BLOB_SIZE, saved_registers, registers_are_saved, exit);
+        r = inner_main_loop(ab, instructions, start, position_of_last_incrw, BLOB_SIZE, saved_registers, registers_are_saved, exit);
     return r;
 }
 
