@@ -670,103 +670,105 @@ static void set_bool(Asm::Assembler<WriterT> &a, bool &var, bool tf)
     ASM<WriterT, sizeof(bool)*8>::mov_rmX_reg(a, mem_2op(AL, RCX));
 }
 
+struct MainLoopState {
+    MainLoopState(Vm::VectorAssemblerBroker &ab_, std::vector<uint8_t> &instructions_)
+        : ab(ab_), instructions(instructions_) { }
+    
+    Vm::VectorAssemblerBroker &ab;
+    std::vector<uint8_t> &instructions;
+    std::size_t start;
+    std::vector<uint8_t>::const_iterator position_of_last_incrw;
+    std::size_t BLOB_SIZE;
+    uint64_t saved_registers[16];
+    bool registers_are_saved;
+    bool exit;
+    uint64_t base_pointer_for_main_loop;
+    uint64_t stack_pointer_for_main_loop;
+};
+
 template <class WriterT>
-static void jump_back_setting_start_to(Asm::Assembler<WriterT> &a,
-                                           WriterT &w,
-                                           uint64_t const base_pointer_for_main_loop,
-                                           uint64_t const stack_pointer_for_main_loop,
-                                           uint64_t *saved_registers,
-                                           bool &registers_are_saved,
-                                           std::size_t &start,
-                                           std::size_t value)
+static void jump_back_setting_start_to(MainLoopState &mls, Asm::Assembler<WriterT> &a, WriterT &w, std::size_t value)
 {
     using namespace Asm;
 
     // Save all registers and set 'registers_are_saved' to true.
-    save_all_regs(a, saved_registers);
-    set_bool(a, registers_are_saved, true);
+    save_all_regs(a, mls.saved_registers);
+    set_bool(a, mls.registers_are_saved, true);
 
     // Increment 'start' by the relevant amount.
     a.mov_reg_imm64(RAX, value);
-    a.mov_moffs64_rax(PTR(&start));
+    a.mov_moffs64_rax(PTR(&(mls.start)));
 
     // Restore the original base pointer and stack pointer.
-    a.mov_reg_imm64(RBP, base_pointer_for_main_loop);
-    a.mov_reg_imm64(RSP, stack_pointer_for_main_loop);
+    a.mov_reg_imm64(RBP, mls.base_pointer_for_main_loop);
+    a.mov_reg_imm64(RSP, mls.stack_pointer_for_main_loop);
 
     // Return from the main loop.
     a.leave();
     a.ret();
 }
 
-static uint64_t inner_main_loop(Vm::VectorAssemblerBroker &ab,
-                                std::vector<uint8_t> &instructions,
-                                std::size_t &start,
-                                std::vector<uint8_t>::const_iterator &position_of_last_incrw,
-                                const std::size_t BLOB_SIZE,
-                                uint64_t *saved_registers,
-                                bool &registers_are_saved,
-                                bool &exit)
+static uint64_t inner_main_loop(MainLoopState &mls)
 {
     using namespace Asm;
 
-    if (start >= instructions.size()) {
-        exit = true;
+    if (mls.start >= mls.instructions.size()) {
+        mls.exit = true;
         return 0;
     }
 
-    uint64_t base_pointer_for_main_loop;
-    uint64_t stack_pointer_for_main_loop;
     // This could just be inline ASM, but since we already have an assembler,
     // we may as well do it without making use of compiler-specific extensions.
-    VectorWriter bpw;
-    VectorAssembler bpa(bpw);
-    bpa.mov_reg_imm64(RCX, PTR(&base_pointer_for_main_loop));
-    bpa.mov_rm64_reg(mem_2op(RBP, RCX));
-    bpa.mov_reg_imm64(RCX, PTR(&stack_pointer_for_main_loop));
-    bpa.mov_rm64_reg(mem_2op(RSP, RCX));
-    bpa.ret();
-    bpw.get_exec_func()();
+    if (mls.base_pointer_for_main_loop == 0) {
+        VectorWriter bpw;
+        VectorAssembler bpa(bpw);
+        bpa.mov_reg_imm64(RCX, PTR(&(mls.base_pointer_for_main_loop)));
+        bpa.mov_rm64_reg(mem_2op(RBP, RCX));
+        bpa.mov_reg_imm64(RCX, PTR(&(mls.stack_pointer_for_main_loop)));
+        bpa.mov_rm64_reg(mem_2op(RSP, RCX));
+        bpa.ret();
+        bpw.get_exec_func()();
+    }
 
-    VectorAssemblerBroker::Entry e = ab.get_writer_assembler_for(&*(instructions.begin() + start));
+    VectorAssemblerBroker::Entry e = mls.ab.get_writer_assembler_for(&*(mls.instructions.begin() + mls.start));
     CountingVectorAssembler *a = e.assembler;
     CountingVectorWriter *w = e.writer;
 
     // Makes it easier to see which ASM is for which VM instruction when debugging.
 #ifdef DEBUG
-//    a->nop();
+    a->nop();
 #endif
 
-    if (registers_are_saved) {
-        restore_all_regs(*a, saved_registers);
+    if (mls.registers_are_saved) {
+        restore_all_regs(*a, mls.saved_registers);
     }
 
 #ifdef DEBUG
-//    a->nop();
+    a->nop();
 #endif
 
     bool last_instruction_exited = false;
     uint8_t current_num_vm_registers = 0;
-    for (std::vector<uint8_t>::const_iterator i = instructions.begin() + start;
-         i != instructions.end() && i - instructions.begin() - start < BLOB_SIZE*4;
+    for (std::vector<uint8_t>::const_iterator i = mls.instructions.begin() + mls.start;
+         i != mls.instructions.end() && i - mls.instructions.begin() - mls.start < mls.BLOB_SIZE*4;
          i += 4) {
-        assert(i + 3 < instructions.end());
+        assert(i + 3 < mls.instructions.end());
 
         last_instruction_exited = false;
 
         // If this bit of the code is jumped to, cache the location of the generated assembly.
         if (i[3] & FLAG_DESTINATION >> 24)
-            ab.mark_bytecode(e, &*i);
+            mls.ab.mark_bytecode(e, &*i);
 
         switch (*i) {
             case OP_NULL: assert(false);
             case OP_EXIT: {
                 last_instruction_exited = true;
-                emit_exit(*a, base_pointer_for_main_loop, stack_pointer_for_main_loop, exit, i[1]);
+                emit_exit(*a, mls.base_pointer_for_main_loop, mls.stack_pointer_for_main_loop, mls.exit, i[1]);
             } break;
             case OP_INCRW: {
                 emit_incrw(*a, i[1]);
-                position_of_last_incrw = i;
+                mls.position_of_last_incrw = i;
                 current_num_vm_registers = i[1];
             } break;
             case OP_LDI16: {
@@ -802,9 +804,9 @@ static uint64_t inner_main_loop(Vm::VectorAssemblerBroker &ab,
                 // If this is a local jump, we can guarantee that the ASM code for the jump will be
                 // created/deleted at the same time as the ASM code for the target, so we can make the jump
                 // directly rather than going via the main JIT loop (much faster).
-                if (VectorAssemblerBroker::Entry const *je = ab.known_to_be_local(&*(instructions.begin() + start), &*(instructions.begin() + bytecode_offset))) {
+                if (VectorAssemblerBroker::Entry const *je = mls.ab.known_to_be_local(&*(mls.instructions.begin() + mls.start), &*(mls.instructions.begin() + bytecode_offset))) {
                     // Check if it's in the same stack frame.
-                    if (! (instructions.begin() + bytecode_offset >= position_of_last_incrw)) {
+                    if (! (mls.instructions.begin() + bytecode_offset >= mls.position_of_last_incrw)) {
                         // TODO: Implement.
                         assert(false);
                     }
@@ -825,23 +827,23 @@ static uint64_t inner_main_loop(Vm::VectorAssemblerBroker &ab,
                 }
                 else {
                     // SLOW
-                    jump_back_setting_start_to(*a, *w, base_pointer_for_main_loop, stack_pointer_for_main_loop, saved_registers, registers_are_saved, start, bytecode_offset);
+                    jump_back_setting_start_to(mls, *a, *w, bytecode_offset);
                 }
             } break;
             default: assert(false);
         }
 #ifdef DEBUG
-//        a->nop();
+        a->nop();
 #endif
     }
 
     if (! last_instruction_exited)
-        jump_back_setting_start_to(*a, *w, base_pointer_for_main_loop, stack_pointer_for_main_loop, saved_registers, registers_are_saved, start, start + BLOB_SIZE * 4);
+        jump_back_setting_start_to(mls, *a, *w, mls.start + (mls.BLOB_SIZE * 4));
 
 #ifdef DEBUG
     std::ofstream f;
     f.open("/tmp/vm_debug_raw", std::ios::app);
-    f.write(reinterpret_cast<char *>(w->get_mem(start)), w->size());
+    f.write(reinterpret_cast<char *>(w->get_mem(mls.start)), w->size());
     f.close();
 #endif
 
@@ -854,14 +856,18 @@ uint64_t Vm::main_loop(std::vector<uint8_t> &instructions, std::size_t start, co
 {
     VectorAssemblerBroker ab(2 << 12);
 
-    uint64_t saved_registers[16];
-    bool registers_are_saved = false;
+    MainLoopState mls(ab, instructions);
+    mls.start = start;
+    mls.position_of_last_incrw = instructions.begin() + start;
+    mls.BLOB_SIZE = BLOB_SIZE;
+    mls.registers_are_saved = false;
+    mls.exit = false;
+    mls.base_pointer_for_main_loop = 0;
+    mls.stack_pointer_for_main_loop = 0;
 
-    std::vector<uint8_t>::const_iterator position_of_last_incrw = instructions.begin() + start;
-    bool exit = false;
     uint64_t r = 0;
-    while (! exit)
-        r = inner_main_loop(ab, instructions, start, position_of_last_incrw, BLOB_SIZE, saved_registers, registers_are_saved, exit);
+    while (! mls.exit)
+        r = inner_main_loop(mls);
     return r;
 }
 
