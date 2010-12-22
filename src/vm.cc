@@ -41,6 +41,8 @@ static char const *op_names[] = {
     "CMP",
     "JE",
     "CJE",
+    "JNE",
+    "CJNE",
     "JG",
     "CJG",
     "JL",
@@ -52,40 +54,43 @@ static char const *op_names[] = {
     "REVEC",
     "REFVEC",
     "SETVEC",
-    "DEBUG_PRINTREG"
+    "DEBUG_PRINTREG",
+    "DEBUG_SAYHI"
 };
 
 #define END OPR_NULL
 static Operand const op_operand_specs[][4] = {
-    { OPR_REGISTER, END },                          // EXIT
+    { OPR_REGISTER, END },                 // EXIT
+    { OPR_REGISTER, END },                 // INCRW
+    { END },                               // DECRW
+    { OPR_REGISTER, OPR_IMM16, END },      // LDI16
+    { OPR_REGISTER, OPR_IMM64, END },      // LDI64
 
-    { OPR_REGISTER, END },                          // INCRW
-    { END },                                        // DECRW
-    { OPR_REGISTER, OPR_IMM16, END },               // LDI16
-    { OPR_REGISTER, OPR_IMM64, END },               // LDI64
+    { OPR_REGISTER, OPR_FLAGS, END },      // JMP
+    { OPR_IMM16, /*OPR_FLAGS,*/ END },     // CJMP
+    { OPR_REGISTER, END },                 // CALL
+    { OPR_REGISTER, END },                 // RET
+    { OPR_REGISTER, OPR_REGISTER, END },   // CMP
+    { OPR_REGISTER, END },                 // JE
+    { OPR_IMM16, END },                    // CJE
+    { OPR_REGISTER, END },                 // JNE
+    { OPR_REGISTER, END },                 // CJNE
+    { OPR_REGISTER, END },                 // JG
+    { OPR_IMM16, END },                    // CJG
+    { OPR_REGISTER, END },                 // JL
+    { OPR_IMM16, END },                    // CJL
 
-    { OPR_REGISTER, OPR_FLAGS, END },               // JMP
-    { OPR_IMM16, /*OPR_FLAGS,*/ END },              // CJMP
-    { OPR_REGISTER, END },                          // CALL
-    { OPR_REGISTER, END },                          // RET
-    { OPR_REGISTER, OPR_REGISTER, END },            // CMP
-    { OPR_REGISTER, END },                          // JE
-    { OPR_IMM16, END },                             // CJE
-    { OPR_REGISTER, END },                          // JG
-    { OPR_IMM16, END },                             // CJG
-    { OPR_REGISTER, END },                          // JL
-    { OPR_IMM16, END },                             // CJL
+    { OPR_REGISTER, OPR_REGISTER, END },   // IADD
+    { OPR_REGISTER, OPR_REGISTER, END },   // IMUL
+    { OPR_REGISTER, OPR_REGISTER, END },   // IDIV
 
-    { OPR_REGISTER, OPR_REGISTER, END },            // IADD
-    { OPR_REGISTER, OPR_REGISTER, END },            // IMUL
-    { OPR_REGISTER, OPR_REGISTER, END },            // IDIV
+    { OPR_REGISTER, END },                 // MKVEC
+    { OPR_REGISTER, OPR_REGISTER, END },   // REVEC
+    { OPR_REGISTER, OPR_REGISTER, END },   // REFVEC
+    { OPR_REGISTER, OPR_REGISTER, END },   // SETVEC
 
-    { OPR_REGISTER, END },                          // MKVEC
-    { OPR_REGISTER, OPR_REGISTER, END },            // REVEC
-    { OPR_REGISTER, OPR_REGISTER, END },            // REFVEC
-    { OPR_REGISTER, OPR_REGISTER, END },            // SETVEC
-
-    { OPR_REGISTER, END },                          // DEBUG_PRINTREG
+    { OPR_REGISTER, END },                 // DEBUG_PRINTREG
+    { END }                                // DEBUG_SAYHI
 };
 #undef END
 
@@ -600,6 +605,7 @@ static void save_regs_before_c_funcall(Asm::Assembler<WriterT> &a, uint8_t numre
 {
     using namespace Asm;
     for (int i = 0; i < sizeof(registers_to_save) / sizeof(Register) && i < numregs - SAVE_OFFSET; ++i) {
+        std::cout << "SAVE i" << i << "\n";
         Register r = registers_to_save[i];
         a.push_rm64(reg_1op(r));
     }
@@ -608,7 +614,7 @@ template <class WriterT>
 static void restore_regs_after_c_funcall(Asm::Assembler<WriterT> &a, uint8_t numregs)
 {
     using namespace Asm;
-    for (int i = std::min(sizeof(registers_to_save) / sizeof(Register), static_cast<unsigned long>(numregs - SAVE_OFFSET)) - 1; i >= 0; --i) {
+    for (int i = std::min(static_cast<long>(sizeof(registers_to_save) / sizeof(Register)), static_cast<long>(numregs - SAVE_OFFSET)) - 1; i >= 0; --i) {
         Register r = registers_to_save[i];
         a.pop_rm64(reg_1op(r));
     }
@@ -636,6 +642,18 @@ static void emit_debug_printreg(Asm::Assembler<WriterT> &a, RegId r, uint8_t cur
     move_vmreg_ptr_to_guaranteed_x86reg(a, RSI, r);
     a.mov_reg_imm64(RCX, PTR(print_vm_reg));
     a.mov_reg_imm64(RAX, 0);
+    save_regs_before_c_funcall(a, current_num_vm_registers);
+    a.call_rm64(reg_1op(RCX));
+    restore_regs_after_c_funcall(a, current_num_vm_registers);
+}
+
+static void sayhi() { std::printf("HI\n"); }
+template <class WriterT>
+static void emit_debug_sayhi(Asm::Assembler<WriterT> &a, uint8_t current_num_vm_registers)
+{
+    using namespace Asm;
+
+    a.mov_reg_imm64(RCX, PTR(sayhi));
     save_regs_before_c_funcall(a, current_num_vm_registers);
     a.call_rm64(reg_1op(RCX));
     restore_regs_after_c_funcall(a, current_num_vm_registers);
@@ -715,7 +733,7 @@ static uint64_t inner_main_loop(Vm::VectorAssemblerBroker &ab,
 
     // Makes it easier to see which ASM is for which VM instruction when debugging.
 #ifdef DEBUG
-    a->nop();
+//    a->nop();
 #endif
 
     if (registers_are_saved) {
@@ -723,7 +741,7 @@ static uint64_t inner_main_loop(Vm::VectorAssemblerBroker &ab,
     }
 
 #ifdef DEBUG
-    a->nop();
+//    a->nop();
 #endif
 
     bool last_instruction_exited = false;
@@ -762,14 +780,20 @@ static uint64_t inner_main_loop(Vm::VectorAssemblerBroker &ab,
         else if (*i == OP_DEBUG_PRINTREG) {
             emit_debug_printreg(*a, i[1], current_num_vm_registers);
         }
-        else if (*i == OP_CJMP || *i == OP_CJE) {
+        else if (*i == OP_DEBUG_SAYHI) {
+            emit_debug_sayhi(*a, current_num_vm_registers);
+        }
+        else if (*i == OP_CJMP || *i == OP_CJE || *i == OP_CJNE) {
+            if (*i == OP_CJMP) last_instruction_exited = true;
+
             std::size_t bytecode_offset = i[1] + (i[2] << 8);
 
             typedef void (CountingVectorAssembler::*jmp_fptr)(Disp<int32_t> disp, BranchHint hint);
             struct Pr { Opcode opcode; BranchHint hint; jmp_fptr fptr; };
             static Pr const jmp_fptrs[] = {
                 { OP_CJMP, BRANCH_HINT_NONE, &CountingVectorAssembler::jmp_nr_rel32 },
-                { OP_CJE, BRANCH_HINT_NONE, &CountingVectorAssembler::je_nr_rel32 }
+                { OP_CJE, BRANCH_HINT_NONE, &CountingVectorAssembler::je_nr_rel32 },
+                { OP_CJNE, BRANCH_HINT_NONE, &CountingVectorAssembler::jne_nr_rel32 }
             };
 
             // If this is a local jump, we can guarantee that the ASM code for the jump will be
@@ -777,7 +801,7 @@ static uint64_t inner_main_loop(Vm::VectorAssemblerBroker &ab,
             // directly rather than going via the main JIT loop (much faster).
             if (VectorAssemblerBroker::Entry const *je = ab.known_to_be_local(&*(instructions.begin() + start), &*(instructions.begin() + bytecode_offset))) {
                 // Check if it's in the same stack frame.
-                if (! (instructions.begin() + bytecode_offset > position_of_last_incrw)) {
+                if (! (instructions.begin() + bytecode_offset >= position_of_last_incrw)) {
                     // TODO: Implement.
                     assert(false);
                 }
@@ -788,7 +812,7 @@ static uint64_t inner_main_loop(Vm::VectorAssemblerBroker &ab,
                 int32_t rel = (int32_t)(target_addr - current_addr);
 
                 int j;
-                for (j = 0; j < sizeof(jmp_fptrs) / sizeof(Pr); ++i) {
+                for (j = 0; j < sizeof(jmp_fptrs) / sizeof(Pr); ++j) {
                     if (jmp_fptrs[j].opcode == *i) {
                         (a->*(jmp_fptrs[j].fptr))(mkdisp<int32_t>(rel, DISP_SUB_ISIZE), jmp_fptrs[j].hint);
                         break;
@@ -802,6 +826,10 @@ static uint64_t inner_main_loop(Vm::VectorAssemblerBroker &ab,
             }
         }
         else assert(false);
+
+#ifdef DEBUG
+//        a->nop();
+#endif
     }
 
     if (! last_instruction_exited)

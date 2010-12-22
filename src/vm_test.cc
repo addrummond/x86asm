@@ -54,7 +54,7 @@ void test2()
         "  LDI16 2 1"
         " >IADD 1 2"
         "  DEBUG_PRINTREG 1"
-        "  CJMP 8"
+        "  CJMP 12"
         ;
 
     std::vector<uint8_t> instructions;
@@ -64,10 +64,41 @@ void test2()
     uint64_t rval = Vm::main_loop(instructions, 0, 100);
 }
 
+//
+// Counting loop.
+//
+void test3()
+{
+    const char *code =
+        "  INCRW 3"
+        "  LDI16 1 1"  // Counter.
+        "  LDI16 2 1"  // Increment.
+        "  LDI16 3 10" // The loop will go round 10 times.
+        " >IADD 1 2"
+        "  DEBUG_PRINTREG 1"
+        "  DEBUG_PRINTREG 3"
+        "  DEBUG_SAYHI"
+        "  CMP 1 3"
+        "  CJNE 16"
+        "  EXIT 1";
+
+    std::vector<uint8_t> instructions;
+    parse_or_die(code, instructions);
+    Util::debug_hex_print(&instructions[0], instructions.size());
+
+    uint64_t rval = Vm::main_loop(instructions, 0, 100);
+    assert(rval != 0);
+    uint64_t rvali = *((uint64_t*)rval);
+    std::printf("TEST3: rval=%lli\n", rvali);
+    assert(rvali == 5);
+    std::printf("* OK\n\n");
+}
+
 int main()
 {
     test1();
 //    test2(); // NOT RUN BY DEFAULT AS IT IS AN INFINITE LOOP.
+    test3();
 
     return 0;
 }

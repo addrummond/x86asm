@@ -26,21 +26,24 @@ enum Opcode {
     OP_CMP     = 10,
     OP_JE      = 11,
     OP_CJE     = 12,
-    OP_JG      = 13,
-    OP_CJG     = 14,
-    OP_JL      = 15,
-    OP_CJL     = 16,
+    OP_JNE     = 13,
+    OP_CJNE    = 14,
+    OP_JG      = 15,
+    OP_CJG     = 16,
+    OP_JL      = 17,
+    OP_CJL     = 18,
 
-    OP_IADD    = 17,
-    OP_IMUL    = 18,
-    OP_IDIV    = 19,
+    OP_IADD    = 19,
+    OP_IMUL    = 20,
+    OP_IDIV    = 21,
 
-    OP_MKVEC   = 20,
-    OP_REVEC   = 21,
-    OP_REFVEC  = 21,
-    OP_SETVEC  = 23,
+    OP_MKVEC   = 22,
+    OP_REVEC   = 23,
+    OP_REFVEC  = 24,
+    OP_SETVEC  = 25,
 
-    OP_DEBUG_PRINTREG = 24
+    OP_DEBUG_PRINTREG = 26,
+    OP_DEBUG_SAYHI = 27
 };
 extern const Opcode FIRST_OP;
 

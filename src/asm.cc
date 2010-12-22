@@ -544,6 +544,7 @@ static void cmp_rmXX_reg_(WriterT &w, ModrmSib const &modrmsib)
 {
     ABIFNZ(compute_rex(modrmsib, SIZE));
     AB(0x39);
+    write_modrmsib_disp(w, modrmsib);
 }
 #define INST(name, size) \
     template <class WriterT> void Asm::Assembler<WriterT>:: \
@@ -812,10 +813,10 @@ void Asm::Assembler<WriterT>::inc_reg64(Register reg) { inc_rm64(reg_1op(reg)); 
 //
 
 // Short and near jumps.
-template <class WriterT, uint8_t OPCODE_PREFIX, uint8_t OPCODE, class DispT, DispSize disp_size>
-static void XX_st_rel_(WriterT &w, DispT disp, BranchHint hint)
+template <class WriterT, uint8_t OPCODE_PREFIX, uint8_t OPCODE, class DispT, DispSize DISP_SIZE>
+static void XX_XX_rel_(WriterT &w, DispT disp, BranchHint hint)
 {
-    std::size_t instruction_size = 1 + disp_size;
+    std::size_t instruction_size = 1 + DISP_SIZE;
 
     if (hint == BRANCH_HINT_TAKEN) {
         ++instruction_size;
@@ -825,23 +826,25 @@ static void XX_st_rel_(WriterT &w, DispT disp, BranchHint hint)
         ++instruction_size;
         AB(0x2E);
     }
+
     if (OPCODE_PREFIX != 0) {
-        ++instruction_size;
         AB(OPCODE_PREFIX);
+        ++instruction_size;
     }
+
     AB(OPCODE);
     typename DispT::IntType d = disp.get(instruction_size);
-    w.a(reinterpret_cast<uint8_t *>(&d), disp_size);
+    w.a(reinterpret_cast<uint8_t *>(&d), DISP_SIZE);
 }
 #define INST(prefix, opcode) \
     template <class WriterT> void Asm::Assembler<WriterT>:: \
     prefix ## _st_rel8 (Disp<int8_t> disp, BranchHint hint) \
-    { XX_st_rel_<WriterT, 0, opcode, Disp<int8_t>, DISP_SIZE_8>(w, disp, hint); }
+    { XX_XX_rel_<WriterT, 0, opcode, Disp<int8_t>, DISP_SIZE_8>(w, disp, hint); }
 #define INST2(prefix, opcode) \
     INST(prefix, opcode) \
     template <class WriterT> void Asm::Assembler<WriterT>:: \
     prefix ## _nr_rel32 (Disp<int32_t> disp, BranchHint hint) \
-    { XX_st_rel_<WriterT, 0x0F, opcode + 0x10, Disp<int32_t>, DISP_SIZE_32 >(w, disp, hint); }
+    { XX_XX_rel_<WriterT, 0x0F, opcode + 0x10, Disp<int32_t>, DISP_SIZE_32 >(w, disp, hint); }
 INST2(ja, 0x77) INST2(jbe, 0x76) INST2(jc, 0x72)
 INST2(jg, 0x7F) INST2(jge, 0x7D) INST2(jl, 0x7C)
 INST2(jle, 0x7E) INST2(jnc, 0x73) INST2(jno, 0x71)
