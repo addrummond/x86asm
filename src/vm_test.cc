@@ -73,11 +73,9 @@ void test3()
         "  INCRW 3"
         "  LDI16 1 1"  // Counter.
         "  LDI16 2 1"  // Increment.
-        "  LDI16 3 10" // The loop will go round 10 times.
+        "  LDI16 3 3" // The loop will go round 3 times.
         " >IADD 1 2"
         "  DEBUG_PRINTREG 1"
-        "  DEBUG_PRINTREG 3"
-        "  DEBUG_SAYHI"
         "  CMP 1 3"
         "  CJNE 16"
         "  EXIT 1";
@@ -90,7 +88,7 @@ void test3()
     assert(rval != 0);
     uint64_t rvali = *((uint64_t*)rval);
     std::printf("TEST3: rval=%lli\n", rvali);
-    assert(rvali == 5);
+    assert(rvali == 3);
     std::printf("* OK\n\n");
 }
 

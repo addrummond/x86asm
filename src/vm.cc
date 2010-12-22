@@ -486,7 +486,8 @@ static void emit_cmp(Asm::Assembler<WriterT> &a, RegId op1, RegId op2)
     using namespace Asm;
     Register r1 = move_vmreg_ptr_to_x86reg(a, RDX, op1);
     Register r2 = move_vmreg_ptr_to_x86reg(a, RCX, op2);
-    a.cmp_rm64_reg(reg_2op(r2, r1));
+    a.mov_reg_rm64(mem_2op(RAX, r2));
+    a.cmp_rm64_reg(mem_2op(RAX, r1));
 }
 
 template <class WriterT>
