@@ -758,76 +758,78 @@ static uint64_t inner_main_loop(Vm::VectorAssemblerBroker &ab,
         if (i[3] & FLAG_DESTINATION >> 24)
             ab.mark_bytecode(e, &*i);
 
-        if (*i == OP_NULL)
-            assert(false);
-        else if (*i == OP_EXIT) {
-            last_instruction_exited = true;
-            emit_exit(*a, base_pointer_for_main_loop, stack_pointer_for_main_loop, exit, i[1]);
-        }
-        else if (*i == OP_INCRW) {
-            emit_incrw(*a, i[1]);
-            position_of_last_incrw = i;
-            current_num_vm_registers = i[1];
-        }
-        else if (*i == OP_LDI16) {
-            emit_ldi(*a, i[1], i[2] + (i[3] << 8));
-        }
-        else if (*i == OP_CMP) {
-            emit_cmp(*a, i[1], i[2]);
-        }
-        else if (*i == OP_IADD) {
-            emit_iadd(*a, i[1], i[2]);
-        }
-        else if (*i == OP_DEBUG_PRINTREG) {
-            emit_debug_printreg(*a, i[1], current_num_vm_registers);
-        }
-        else if (*i == OP_DEBUG_SAYHI) {
-            emit_debug_sayhi(*a, current_num_vm_registers);
-        }
-        else if (*i == OP_CJMP || *i == OP_CJE || *i == OP_CJNE) {
-            if (*i == OP_CJMP) last_instruction_exited = true;
+        switch (*i) {
+            case OP_NULL: assert(false);
+            case OP_EXIT: {
+                last_instruction_exited = true;
+                emit_exit(*a, base_pointer_for_main_loop, stack_pointer_for_main_loop, exit, i[1]);
+            } break;
+            case OP_INCRW: {
+                emit_incrw(*a, i[1]);
+                position_of_last_incrw = i;
+                current_num_vm_registers = i[1];
+            } break;
+            case OP_LDI16: {
+                emit_ldi(*a, i[1], i[2] + (i[3] << 8));
+            } break;
+            case OP_CMP: {
+                emit_cmp(*a, i[1], i[2]);
+            } break;
+            case OP_IADD: {
+                emit_iadd(*a, i[1], i[2]);
+            } break;
+            case OP_DEBUG_PRINTREG: {
+                emit_debug_printreg(*a, i[1], current_num_vm_registers);
+            } break;
+            case OP_DEBUG_SAYHI: {
+                emit_debug_sayhi(*a, current_num_vm_registers);
+            } break;
+            case OP_CJMP:
+            case OP_CJE:
+            case OP_CJNE: {
+                if (*i == OP_CJMP) last_instruction_exited = true;
 
-            std::size_t bytecode_offset = i[1] + (i[2] << 8);
+                std::size_t bytecode_offset = i[1] + (i[2] << 8);
 
-            typedef void (CountingVectorAssembler::*jmp_fptr)(Disp<int32_t> disp, BranchHint hint);
-            struct Pr { Opcode opcode; BranchHint hint; jmp_fptr fptr; };
-            static Pr const jmp_fptrs[] = {
-                { OP_CJMP, BRANCH_HINT_NONE, &CountingVectorAssembler::jmp_nr_rel32 },
-                { OP_CJE, BRANCH_HINT_NONE, &CountingVectorAssembler::je_nr_rel32 },
-                { OP_CJNE, BRANCH_HINT_NONE, &CountingVectorAssembler::jne_nr_rel32 }
-            };
+                typedef void (CountingVectorAssembler::*jmp_fptr)(Disp<int32_t> disp, BranchHint hint);
+                struct Pr { Opcode opcode; BranchHint hint; jmp_fptr fptr; };
+                static Pr const jmp_fptrs[] = {
+                    { OP_CJMP, BRANCH_HINT_NONE, &CountingVectorAssembler::jmp_nr_rel32 },
+                    { OP_CJE, BRANCH_HINT_NONE, &CountingVectorAssembler::je_nr_rel32 },
+                    { OP_CJNE, BRANCH_HINT_NONE, &CountingVectorAssembler::jne_nr_rel32 }
+                };
 
-            // If this is a local jump, we can guarantee that the ASM code for the jump will be
-            // created/deleted at the same time as the ASM code for the target, so we can make the jump
-            // directly rather than going via the main JIT loop (much faster).
-            if (VectorAssemblerBroker::Entry const *je = ab.known_to_be_local(&*(instructions.begin() + start), &*(instructions.begin() + bytecode_offset))) {
-                // Check if it's in the same stack frame.
-                if (! (instructions.begin() + bytecode_offset >= position_of_last_incrw)) {
-                    // TODO: Implement.
-                    assert(false);
-                }
-
-                // FAST(er)
-                uint64_t current_addr = w->get_start_addr() + w->size();
-                uint64_t target_addr = je->writer->get_start_addr(je->offset);
-                int32_t rel = (int32_t)(target_addr - current_addr);
-
-                int j;
-                for (j = 0; j < sizeof(jmp_fptrs) / sizeof(Pr); ++j) {
-                    if (jmp_fptrs[j].opcode == *i) {
-                        (a->*(jmp_fptrs[j].fptr))(mkdisp<int32_t>(rel, DISP_SUB_ISIZE), jmp_fptrs[j].hint);
-                        break;
+                // If this is a local jump, we can guarantee that the ASM code for the jump will be
+                // created/deleted at the same time as the ASM code for the target, so we can make the jump
+                // directly rather than going via the main JIT loop (much faster).
+                if (VectorAssemblerBroker::Entry const *je = ab.known_to_be_local(&*(instructions.begin() + start), &*(instructions.begin() + bytecode_offset))) {
+                    // Check if it's in the same stack frame.
+                    if (! (instructions.begin() + bytecode_offset >= position_of_last_incrw)) {
+                        // TODO: Implement.
+                        assert(false);
                     }
-                }
-                assert(j < sizeof(jmp_fptrs) / sizeof(Pr));
-            }
-            else {
-                // SLOW
-                jump_back_setting_start_to(*a, *w, base_pointer_for_main_loop, stack_pointer_for_main_loop, saved_registers, registers_are_saved, start, bytecode_offset);
-            }
-        }
-        else assert(false);
 
+                    // FAST(er)
+                    uint64_t current_addr = w->get_start_addr() + w->size();
+                    uint64_t target_addr = je->writer->get_start_addr(je->offset);
+                    int32_t rel = (int32_t)(target_addr - current_addr);
+
+                    int j;
+                    for (j = 0; j < sizeof(jmp_fptrs) / sizeof(Pr); ++j) {
+                        if (jmp_fptrs[j].opcode == *i) {
+                            (a->*(jmp_fptrs[j].fptr))(mkdisp<int32_t>(rel, DISP_SUB_ISIZE), jmp_fptrs[j].hint);
+                            break;
+                        }
+                    }
+                    assert(j < sizeof(jmp_fptrs) / sizeof(Pr));
+                }
+                else {
+                    // SLOW
+                    jump_back_setting_start_to(*a, *w, base_pointer_for_main_loop, stack_pointer_for_main_loop, saved_registers, registers_are_saved, start, bytecode_offset);
+                }
+            } break;
+            default: assert(false);
+        }
 #ifdef DEBUG
 //        a->nop();
 #endif
