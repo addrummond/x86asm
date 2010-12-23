@@ -22,14 +22,17 @@ asm_test.o: asm.o asm_test.cc mremap.o
 asm_test: asm_test.o
 	$(INVOKECXX) asm.o mremap.o asm_test.o util.o -o asm_test
 
-vm.o: vm.cc vm.hh asm.o mremap.o
+mem.o: mem.cc mem.hh asm.o mremap.o
+	$(INVOKECXX) -c mem.cc -o mem.o
+
+vm.o: vm.cc vm.hh asm.o mremap.o mem.o
 	$(INVOKECXX) -c vm.cc -o vm.o
 
 vm_test.o: vm.o vm_test.cc util.o
 	$(INVOKECXX) -c vm_test.cc -o vm_test.o
 
 vm_test: vm_test.o
-	$(INVOKECXX) vm.o util.o asm.o mremap.o vm_test.o -o vm_test
+	$(INVOKECXX) vm.o util.o asm.o mremap.o mem.o vm_test.o -o vm_test
 
 clean:
 	rm *_test ; rm *.o

@@ -1,5 +1,6 @@
 #include <vm.hh>
 #include <myassert.hh>
+#include <mem.hh>
 #include <cctype>
 #include <sstream>
 #include <cstdlib>
@@ -437,27 +438,28 @@ static void *my_malloc(size_t bytes)
     return r;
 }
 
+static void *call_alloc_tagged_mem(Mem::MemState &ms, std::size_t size, unsigned tag)
+{ ms.alloc_tagged_mem(size, tag); }
 // Emit code to allocate tagged memory.
-// Leaves address (untagged) in RAX.
+// Leaves address (untagged) in RAX and tagged in RDX. (This
+// is how the Mem::MemState::Allocation structure is returned according
+// to the x86-64 ABI.)
 template <class WriterT>
-static void emit_malloc_constsize(Asm::Assembler<WriterT> &a, std::size_t size, RegId ptr_dest, unsigned tag)
+static void emit_malloc_constsize(Asm::Assembler<WriterT> &a, Mem::MemState &mem_state, uint8_t current_num_vm_registers, std::size_t size, RegId ptr_dest, unsigned tag)
 {
     using namespace Asm;
 
     assert(tag < 4);
 
-    a.mov_reg_imm64(RDI, static_cast<uint64_t>(size));
-    a.mov_reg_imm64(RCX, (uint64_t)my_malloc);
+    save_regs_before_c_funcall(a, current_num_vm_registers);
+    a.mov_reg_imm64(RDI, PTR(&mem_state));
+    a.mov_reg_imm64(RSI, static_cast<uint64_t>(size));
+    a.mov_reg_imm64(RDX, static_cast<uint64_t>(tag));
     a.mov_reg_imm64(RAX, 0);
+    a.mov_reg_imm64(RCX, PTR(call_alloc_tagged_mem));
     a.call_rm64(reg_1op(RCX));
-
-    // TODO: Handle out of memory case.
-
-    // Add the tag (pointer to allocated memory is now in RAX).
-    a.mov_reg_imm64(RCX, static_cast<uint64_t>(tag));
-    a.or_reg_rm64(reg_2op(RCX, RAX));
-
-    move_x86reg_to_vmreg_ptr(a, ptr_dest, RCX);
+    move_x86reg_to_vmreg_ptr(a, ptr_dest, RDX);
+    restore_regs_after_c_funcall(a, current_num_vm_registers);
 }
 
 template <class WriterT>
@@ -472,10 +474,10 @@ static void emit_incrw(Asm::Assembler<WriterT> &a, RegId num_regs)
 }
 
 template <class WriterT>
-static void emit_ldi(Asm::Assembler<WriterT> &a, RegId ptr_dest, uint64_t val)
+static void emit_ldi(Asm::Assembler<WriterT> &a, Mem::MemState &mem_state, uint8_t current_num_vm_registers, RegId ptr_dest, uint64_t val)
 {
     using namespace Asm;
-    emit_malloc_constsize(a, 8, ptr_dest, TAG_INT); // Leaves untagged address in RAX.
+    emit_malloc_constsize(a, mem_state, current_num_vm_registers, 8, ptr_dest, TAG_INT); // Leaves untagged address in RAX.
     a.mov_reg_imm64(RCX, val);
     a.mov_rm64_reg(mem_2op(RCX, RAX));
 }
@@ -641,9 +643,10 @@ static void emit_debug_printreg(Asm::Assembler<WriterT> &a, RegId r, uint8_t cur
 
     a.mov_reg_imm32(EDI, static_cast<uint32_t>(r));
     move_vmreg_ptr_to_guaranteed_x86reg(a, RSI, r);
+
+    save_regs_before_c_funcall(a, current_num_vm_registers);
     a.mov_reg_imm64(RCX, PTR(print_vm_reg));
     a.mov_reg_imm64(RAX, 0);
-    save_regs_before_c_funcall(a, current_num_vm_registers);
     a.call_rm64(reg_1op(RCX));
     restore_regs_after_c_funcall(a, current_num_vm_registers);
 }
@@ -684,6 +687,8 @@ struct MainLoopState {
     bool exit;
     uint64_t base_pointer_for_main_loop;
     uint64_t stack_pointer_for_main_loop;
+
+    Mem::MemState mem_state;
 };
 
 template <class WriterT>
@@ -772,7 +777,7 @@ static uint64_t inner_main_loop(MainLoopState &mls)
                 current_num_vm_registers = i[1];
             } break;
             case OP_LDI16: {
-                emit_ldi(*a, i[1], i[2] + (i[3] << 8));
+                emit_ldi(*a, mls.mem_state, current_num_vm_registers, i[1], i[2] + (i[3] << 8));
             } break;
             case OP_CMP: {
                 emit_cmp(*a, i[1], i[2]);
@@ -870,6 +875,3 @@ uint64_t Vm::main_loop(std::vector<uint8_t> &instructions, std::size_t start, co
         r = inner_main_loop(mls);
     return r;
 }
-
-
-
