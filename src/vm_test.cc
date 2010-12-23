@@ -124,8 +124,8 @@ void test4()
 int main()
 {
     test1();
-    test2(); // NOT RUN BY DEFAULT AS IT IS AN INFINITE LOOP.
-//    test3();
+//    test2(); // NOT RUN BY DEFAULT AS IT IS AN INFINITE LOOP.
+    test3();
     test4();
 
     return 0;

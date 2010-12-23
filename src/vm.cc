@@ -324,18 +324,41 @@ Vm::VectorAssemblerBroker::VectorAssemblerBroker(const std::size_t MAX_BYTES_)
 std::size_t Vm::VectorAssemblerBroker::size()
 { return items.size(); }
 
-Vm::VectorAssemblerBroker::Entry const &Vm::VectorAssemblerBroker::get_writer_assembler_for(uint8_t const *bytecode)
+struct CheckIfContainsRetAddr {
+    VectorAssemblerBroker::Entry const &e;
+    bool &contained;
+    CheckIfContainsRetAddr(VectorAssemblerBroker::Entry const &e_, bool &contained_) : e(e_), contained(contained_) { }
+
+    void operator()(uint64_t return_address)
+    {
+        uint64_t start = e.writer->get_start_addr();
+        uint64_t end = start + e.writer->size();
+        if (return_address >= start && return_address >= end) {
+            contained = true;
+        }
+    }
+};
+
+Vm::VectorAssemblerBroker::Entry const &Vm::VectorAssemblerBroker::simple_get_writer_assembler_for(uint8_t const *bytecode)
+{
+    using namespace Asm;
+
+    CountingVectorWriter *w = new CountingVectorWriter(current_size);
+    CountingVectorAssembler *a = new CountingVectorAssembler(*w);
+    boost::shared_ptr<VectorAssemblerBroker::Entry> e(new VectorAssemblerBroker::Entry(w, a, 0));
+    items[bytecode] = e;
+    reverse_items[e] = bytecode;
+    return *e;
+}
+
+template <class FuncT>
+Vm::VectorAssemblerBroker::Entry const &Vm::VectorAssemblerBroker::get_writer_assembler_for(uint8_t const *bytecode, FuncT deletion_criterion)
 {
     using namespace Asm;
 
     ConstMapIt it = items.find(bytecode);
     if (it == items.end()) {
-        CountingVectorWriter *w = new CountingVectorWriter(current_size);
-        CountingVectorAssembler *a = new CountingVectorAssembler(*w);
-        boost::shared_ptr<VectorAssemblerBroker::Entry> e(new VectorAssemblerBroker::Entry(w, a, 0));
-        items[bytecode] = e;
-        reverse_items[e] = bytecode;
-        return *e;
+        return simple_get_writer_assembler_for(bytecode);
     }
     else if (current_size >= MAX_BYTES) {
         // Not a very good algorithm...
@@ -351,6 +374,10 @@ Vm::VectorAssemblerBroker::Entry const &Vm::VectorAssemblerBroker::get_writer_as
         }
         assert(items.size() > 0);
         if (it2 == items.end()) --it2; // Note that there must be at least one element in 'items' if current_size >= MAX_BYTES
+
+        if (! deletion_criterion(*(it2->second)))
+            return simple_get_writer_assembler_for(bytecode);
+
         delete it2->second->writer;
         delete it2->second->assembler;
         boost::shared_ptr<Entry> e(new VectorAssemblerBroker::Entry(
@@ -737,7 +764,8 @@ static uint64_t inner_main_loop(MainLoopState &mls)
         bpw.get_exec_func()();
     }
 
-    VectorAssemblerBroker::Entry e = mls.ab.get_writer_assembler_for(&*(mls.instructions.begin() + mls.start));
+    VectorAssemblerBroker::Entry e = mls.ab.get_writer_assembler_for(&*(mls.instructions.begin() + mls.start),
+                                                                     VectorAssemblerBroker::AlwaysDelete());
     CountingVectorAssembler *a = e.assembler;
     CountingVectorWriter *w = e.writer;
 

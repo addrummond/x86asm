@@ -87,18 +87,25 @@ public:
         int64_t offset; // Offset into the generated assembly corresponding to the bytecode position.
     };
 
+    struct AlwaysDelete {
+        bool operator()(Entry const &entry) { return true; }
+    };
+
     typedef std::map<uint8_t const *, boost::shared_ptr<Entry> >::iterator MapIt;
     typedef std::map<uint8_t const *, boost::shared_ptr<Entry> >::const_iterator ConstMapIt;
 
     VectorAssemblerBroker(const std::size_t MAX_BYTES);
 
     std::size_t size();
-    Entry const &get_writer_assembler_for(uint8_t const *bytecode);
+    template <class FuncT>
+    Entry const &get_writer_assembler_for(uint8_t const *bytecode, FuncT deletion_criterion=AlwaysDelete());
     uint64_t get_asm_code_addr_for(uint8_t const *bytecode);
     void mark_bytecode(Entry const &e, uint8_t const *bytecode_addr);
     Entry const *known_to_be_local(uint8_t const *bytecode_addr1, uint8_t const *bytecode_addr2);
 
 private:
+    Entry const &simple_get_writer_assembler_for(uint8_t const *bytecode);
+
     std::map<uint8_t const *, boost::shared_ptr<Entry> > items;
     std::map<boost::shared_ptr<Entry>, uint8_t const *> reverse_items;
     const std::size_t MAX_BYTES;
