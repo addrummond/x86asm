@@ -103,7 +103,7 @@ void test4()
         "  LDI16 1 1"         // 4  Counter.
         "  LDI16 2 1"         // 8  Increment.
         "  LDI64 3 20000000"  // 12 The loop will go round this many times.
-        "  >IADD 1 2"         // 24 [LDI64 takes up 12 bytes]
+        " >IADD 1 2"          // 24 [LDI64 takes up 12 bytes]
         "  CMP 1 3"           // 28
         "  CJNE 24"           // 32
         "  DEBUG_SAYHI"       // 36
