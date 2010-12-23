@@ -96,7 +96,7 @@ int main()
 {
     test1();
 //    test2(); // NOT RUN BY DEFAULT AS IT IS AN INFINITE LOOP.
-//    test3();
+    test3();
 
     return 0;
 }
