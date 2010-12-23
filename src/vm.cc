@@ -685,6 +685,7 @@ struct MainLoopState {
     std::size_t BLOB_SIZE;
     uint64_t saved_registers[16];
     bool registers_are_saved;
+    uint8_t current_num_vm_registers;
     bool exit;
     uint64_t base_pointer_for_main_loop;
     uint64_t stack_pointer_for_main_loop;
@@ -754,7 +755,6 @@ static uint64_t inner_main_loop(MainLoopState &mls)
 #endif
 
     bool last_instruction_exited = false;
-    uint8_t current_num_vm_registers = 0;
     std::vector<uint8_t>::const_iterator i;
     for (i = mls.instructions.begin() + mls.start;
          i != mls.instructions.end() && i - mls.instructions.begin() - mls.start < mls.BLOB_SIZE*4;
@@ -776,14 +776,14 @@ static uint64_t inner_main_loop(MainLoopState &mls)
             case OP_INCRW: {
                 emit_incrw(*a, i[1]);
                 mls.position_of_last_incrw = i;
-                current_num_vm_registers = i[1];
+                mls.current_num_vm_registers = i[1];
             } break;
             case OP_LDI16: {
-                emit_ldi(*a, mls.mem_state, current_num_vm_registers, i[1], i[2] + ((uint64_t)i[3] << 8));
+                emit_ldi(*a, mls.mem_state, mls.current_num_vm_registers, i[1], i[2] + ((uint64_t)i[3] << 8));
             } break;
             case OP_LDI64: {
 #define C(x) static_cast<uint64_t>(x)
-                emit_ldi(*a, mls.mem_state, current_num_vm_registers, i[1],
+                emit_ldi(*a, mls.mem_state, mls.current_num_vm_registers, i[1],
                          i[4] + (C(i[5]) << 8) + (C(i[6]) << 16) +
                          (C(i[7]) << 24) + (C(i[8]) << 32) +
                          (C(i[9]) << 40) + (C(i[10]) << 48) +
@@ -798,10 +798,10 @@ static uint64_t inner_main_loop(MainLoopState &mls)
                 emit_iadd(*a, i[1], i[2]);
             } break;
             case OP_DEBUG_PRINTREG: {
-                emit_debug_printreg(*a, i[1], current_num_vm_registers);
+                emit_debug_printreg(*a, i[1], mls.current_num_vm_registers);
             } break;
             case OP_DEBUG_SAYHI: {
-                emit_debug_sayhi(*a, current_num_vm_registers);
+                emit_debug_sayhi(*a, mls.current_num_vm_registers);
             } break;
             case OP_CJMP:
             case OP_CJE:
@@ -878,6 +878,7 @@ uint64_t Vm::main_loop(std::vector<uint8_t> &instructions, std::size_t start, co
     mls.position_of_last_incrw = instructions.begin() + start;
     mls.BLOB_SIZE = BLOB_SIZE;
     mls.registers_are_saved = false;
+    mls.current_num_vm_registers = 0;
     mls.exit = false;
     mls.base_pointer_for_main_loop = 0;
     mls.stack_pointer_for_main_loop = 0;
