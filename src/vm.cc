@@ -843,6 +843,9 @@ static uint64_t inner_main_loop(MainLoopState &mls)
                     assert(j < sizeof(jmp_fptrs) / sizeof(Pr));
                 }
                 else {
+#ifdef DEBUG
+                    std::printf("** SLOW JUMP (possible bug) **\n");
+#endif
                     // SLOW
                     jump_back_setting_start_to(mls, *a, *w, bytecode_offset);
                 }
