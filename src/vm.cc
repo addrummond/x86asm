@@ -197,6 +197,7 @@ static bool finalizeInstruction(Opcode currentOpCode,
             return false;
         }        
         extra = *operand;
+        has_extra = true;
     }
     
     instructions.reserve(instructions.size() + 12);
@@ -754,7 +755,8 @@ static uint64_t inner_main_loop(MainLoopState &mls)
 
     bool last_instruction_exited = false;
     uint8_t current_num_vm_registers = 0;
-    for (std::vector<uint8_t>::const_iterator i = mls.instructions.begin() + mls.start;
+    std::vector<uint8_t>::const_iterator i;
+    for (i = mls.instructions.begin() + mls.start;
          i != mls.instructions.end() && i - mls.instructions.begin() - mls.start < mls.BLOB_SIZE*4;
          i += 4) {
         assert(i + 3 < mls.instructions.end());
@@ -777,7 +779,17 @@ static uint64_t inner_main_loop(MainLoopState &mls)
                 current_num_vm_registers = i[1];
             } break;
             case OP_LDI16: {
-                emit_ldi(*a, mls.mem_state, current_num_vm_registers, i[1], i[2] + (i[3] << 8));
+                emit_ldi(*a, mls.mem_state, current_num_vm_registers, i[1], i[2] + ((uint64_t)i[3] << 8));
+            } break;
+            case OP_LDI64: {
+#define C(x) static_cast<uint64_t>(x)
+                emit_ldi(*a, mls.mem_state, current_num_vm_registers, i[1],
+                         i[4] + (C(i[5]) << 8) + (C(i[6]) << 16) +
+                         (C(i[7]) << 24) + (C(i[8]) << 32) +
+                         (C(i[9]) << 40) + (C(i[10]) << 48) +
+                         (C(i[11]) << 56));
+                i += 8;
+#undef C
             } break;
             case OP_CMP: {
                 emit_cmp(*a, i[1], i[2]);
@@ -796,7 +808,7 @@ static uint64_t inner_main_loop(MainLoopState &mls)
             case OP_CJNE: {
                 if (*i == OP_CJMP) last_instruction_exited = true;
 
-                std::size_t bytecode_offset = i[1] + (i[2] << 8);
+                std::size_t bytecode_offset = i[1] + ((std::size_t)i[2] << 8);
 
                 typedef void (CountingVectorAssembler::*jmp_fptr)(Disp<int32_t> disp, BranchHint hint);
                 struct Pr { Opcode opcode; BranchHint hint; jmp_fptr fptr; };
@@ -843,7 +855,7 @@ static uint64_t inner_main_loop(MainLoopState &mls)
     }
 
     if (! last_instruction_exited)
-        jump_back_setting_start_to(mls, *a, *w, mls.start + (mls.BLOB_SIZE * 4));
+        jump_back_setting_start_to(mls, *a, *w, i - mls.instructions.begin());
 
 #ifdef DEBUG
     std::ofstream f;
