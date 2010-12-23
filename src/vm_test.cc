@@ -73,7 +73,7 @@ void test3()
         "  INCRW 3"
         "  LDI16 1 1"  // Counter.
         "  LDI16 2 1"  // Increment.
-        "  LDI16 3 3" // The loop will go round 3 times.
+        "  LDI16 3 3"  // The loop will go round 3 times.
         " >IADD 1 2"
         "  DEBUG_PRINTREG 1"
         "  CMP 1 3"
