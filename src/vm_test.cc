@@ -99,15 +99,15 @@ void test3()
 void test4()
 {
     const char *code =
-        "  INCRW 3"
-        "  LDI16 1 1" // Counter.
-        "  LDI16 2 1" // Increment.
-        "  LDI64 3 20000000"  // The loop will go round this many times.
-        "  >IADD 1 2"
-        "  CMP 1 3"
-        "  CJNE 24"
-        "  DEBUG_SAYHI"
-        "  EXIT 1";
+        "  INCRW 3"           // 0
+        "  LDI16 1 1"         // 4  Counter.
+        "  LDI16 2 1"         // 8  Increment.
+        "  LDI64 3 20000000"  // 12 The loop will go round this many times.
+        "  >IADD 1 2"         // 24 [LDI64 takes up 12 bytes]
+        "  CMP 1 3"           // 28
+        "  CJNE 24"           // 32
+        "  DEBUG_SAYHI"       // 36
+        "  EXIT 1";           // 40
 
     std::vector<uint8_t> instructions;
     parse_or_die(code, instructions);
