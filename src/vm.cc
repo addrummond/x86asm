@@ -900,21 +900,17 @@ uint64_t Vm::main_loop(std::vector<uint8_t> &instructions, std::size_t start, co
     mls.BLOB_SIZE = BLOB_SIZE;
     mls.registers_are_saved = false;
     mls.current_num_vm_registers = 0;
-    mls.base_pointer_for_main_loop = 0;
-    mls.stack_pointer_for_main_loop = 0;
 
-    if (mls.base_pointer_for_main_loop == 0) {
-        // This could just be inline ASM, but since we already have an assembler,
-        // we may as well do it without making use of compiler-specific extensions.
-        VectorWriter bpw;
-        VectorAssembler bpa(bpw);
-        bpa.mov_reg_imm64(RCX, PTR(&(mls.base_pointer_for_main_loop)));
-        bpa.mov_rm64_reg(mem_2op(RBP, RCX));
-        bpa.mov_reg_imm64(RCX, PTR(&(mls.stack_pointer_for_main_loop)));
-        bpa.mov_rm64_reg(mem_2op(RSP, RCX));
-        bpa.ret();
-        bpw.get_exec_func()();
-    }
+    // This could just be inline ASM, but since we already have an assembler,
+    // we may as well do it without making use of compiler-specific extensions.
+    VectorWriter bpw;
+    VectorAssembler bpa(bpw);
+    bpa.mov_reg_imm64(RCX, PTR(&(mls.base_pointer_for_main_loop)));
+    bpa.mov_rm64_reg(mem_2op(RBP, RCX));
+    bpa.mov_reg_imm64(RCX, PTR(&(mls.stack_pointer_for_main_loop)));
+    bpa.mov_rm64_reg(mem_2op(RSP, RCX));
+    bpa.ret();
+    bpw.get_exec_func()();
 
     return inner_main_loop(mls);
 }
