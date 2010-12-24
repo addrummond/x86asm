@@ -35,6 +35,11 @@ private:
     std::size_t slab_size;
 };
 
+template <class FuncT>
+void walk_stack(uint64_t base_pointer, uint64_t stop_pointer, FuncT func);
+
 }
+
+#include <mem.hxx>
 
 #endif

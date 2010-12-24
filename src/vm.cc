@@ -324,10 +324,11 @@ Vm::VectorAssemblerBroker::VectorAssemblerBroker(const std::size_t MAX_BYTES_)
 std::size_t Vm::VectorAssemblerBroker::size()
 { return items.size(); }
 
-struct CheckIfContainsRetAddr {
+struct CheckIfEntryContainsRetAddr {
     VectorAssemblerBroker::Entry const &e;
     bool &contained;
-    CheckIfContainsRetAddr(VectorAssemblerBroker::Entry const &e_, bool &contained_) : e(e_), contained(contained_) { }
+    CheckIfEntryContainsRetAddr(VectorAssemblerBroker::Entry const &e_, bool &contained_)
+        : e(e_), contained(contained_) { }
 
     void operator()(uint64_t return_address)
     {
@@ -336,6 +337,19 @@ struct CheckIfContainsRetAddr {
         if (return_address >= start && return_address >= end) {
             contained = true;
         }
+    }
+};
+struct CheckIfCallStackContainsRetAddr {
+    uint64_t base_pointer;
+    uint64_t stop_pointer;
+    CheckIfCallStackContainsRetAddr(uint64_t base_pointer_, uint64_t stop_pointer_)
+        : base_pointer(base_pointer_), stop_pointer(stop_pointer_) { }
+
+    bool operator()(VectorAssemblerBroker::Entry const &e)
+    {
+        bool contained = false;
+        Mem::walk_stack(base_pointer, stop_pointer, CheckIfEntryContainsRetAddr(e, contained));
+        return contained;
     }
 };
 
@@ -375,7 +389,7 @@ Vm::VectorAssemblerBroker::Entry const &Vm::VectorAssemblerBroker::get_writer_as
         assert(items.size() > 0);
         if (it2 == items.end()) --it2; // Note that there must be at least one element in 'items' if current_size >= MAX_BYTES
 
-        if (! deletion_criterion(*(it2->second)))
+        if (! deletion_criterion(const_cast<const Vm::VectorAssemblerBroker::Entry &>(*(it2->second))))
             return simple_get_writer_assembler_for(bytecode);
 
         delete it2->second->writer;
@@ -697,6 +711,21 @@ static void set_bool(Asm::Assembler<WriterT> &a, bool &var, bool tf)
     ASM<WriterT, sizeof(bool)*8>::mov_rmX_reg(a, mem_2op(AL, RCX));
 }
 
+// This could just be inline ASM, but since we already have an assembler,
+// we may as well do it without making use of compiler-specific extensions.
+#define GET_BASE_POINTER_AND_STACK_POINTER(bp_var, sp_var) \
+    do { \
+        using namespace Asm; \
+        VectorWriter bpw__; \
+        VectorAssembler bpa__(bpw__); \
+        bpa__.mov_reg_imm64(RCX, PTR(&(bp_var))); \
+        bpa__.mov_rm64_reg(mem_2op(RBP, RCX)); \
+        bpa__.mov_reg_imm64(RCX, PTR(&(sp_var))); \
+        bpa__.mov_rm64_reg(mem_2op(RSP, RCX)); \
+        bpa__.ret(); \
+        bpw__.get_exec_func()(); \
+    } while (0);
+
 struct MainLoopState {
     MainLoopState(Vm::VectorAssemblerBroker &ab_, std::vector<uint8_t> &instructions_)
         : ab(ab_), instructions(instructions_) { }
@@ -709,8 +738,8 @@ struct MainLoopState {
     uint64_t saved_registers[16];
     bool registers_are_saved;
     uint8_t current_num_vm_registers;
-    uint64_t base_pointer_for_main_loop;
-    uint64_t stack_pointer_for_main_loop;
+    uint64_t initial_base_pointer_for_main_loop;
+    uint64_t initial_stack_pointer_for_main_loop;
 
     Mem::MemState mem_state;
 };
@@ -745,12 +774,23 @@ static uint64_t inner_main_loop(MainLoopState &mls)
         // we may as well do it without making use of compiler-specific extensions.
         VectorWriter evw;
         VectorAssembler eva(evw);
-        emit_exit(eva, mls.base_pointer_for_main_loop, mls.stack_pointer_for_main_loop, 0);
+        emit_exit(eva, mls.initial_base_pointer_for_main_loop, mls.initial_stack_pointer_for_main_loop, 0);
         evw.get_exec_func()(); // This will return from the outer main loop.
     }
 
-    VectorAssemblerBroker::Entry e = mls.ab.get_writer_assembler_for(&*(mls.instructions.begin() + mls.start),
-                                                                     VectorAssemblerBroker::AlwaysDelete());
+    uint64_t bp;
+    uint64_t sp;
+    VectorAssemblerBroker::Entry e;
+    if (mls.registers_are_saved) {
+        GET_BASE_POINTER_AND_STACK_POINTER(bp, sp);
+        e = mls.ab.get_writer_assembler_for(&*(mls.instructions.begin() + mls.start),
+                                            CheckIfCallStackContainsRetAddr(bp, mls.initial_base_pointer_for_main_loop));
+    }
+    else {
+        e = mls.ab.get_writer_assembler_for(&*(mls.instructions.begin() + mls.start),
+                                            VectorAssemblerBroker::AlwaysDelete());
+    }
+
     CountingVectorAssembler *a = e.assembler;
     CountingVectorWriter *w = e.writer;
 
@@ -787,7 +827,7 @@ static uint64_t inner_main_loop(MainLoopState &mls)
             case OP_NULL: assert(false);
             case OP_EXIT: {
                 last_instruction_exited = true;
-                emit_exit(*a, mls.base_pointer_for_main_loop, mls.stack_pointer_for_main_loop, i[1]);
+                emit_exit(*a, mls.initial_base_pointer_for_main_loop, mls.initial_stack_pointer_for_main_loop, i[1]);
             } break;
             case OP_INCRW: {
                 emit_incrw(*a, i[1]);
@@ -901,16 +941,8 @@ uint64_t Vm::main_loop(std::vector<uint8_t> &instructions, std::size_t start, co
     mls.registers_are_saved = false;
     mls.current_num_vm_registers = 0;
 
-    // This could just be inline ASM, but since we already have an assembler,
-    // we may as well do it without making use of compiler-specific extensions.
-    VectorWriter bpw;
-    VectorAssembler bpa(bpw);
-    bpa.mov_reg_imm64(RCX, PTR(&(mls.base_pointer_for_main_loop)));
-    bpa.mov_rm64_reg(mem_2op(RBP, RCX));
-    bpa.mov_reg_imm64(RCX, PTR(&(mls.stack_pointer_for_main_loop)));
-    bpa.mov_rm64_reg(mem_2op(RSP, RCX));
-    bpa.ret();
-    bpw.get_exec_func()();
+    GET_BASE_POINTER_AND_STACK_POINTER(mls.initial_base_pointer_for_main_loop,
+                                       mls.initial_stack_pointer_for_main_loop);
 
     return inner_main_loop(mls);
 }
