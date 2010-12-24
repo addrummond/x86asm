@@ -680,7 +680,7 @@ struct ASM {
 };
 #define INST(size) \
     template <class WriterT> \
-    struct ASM<WriterT, size/8> {                                 \
+    struct ASM<WriterT, size/8> { \
         static void mov_rmX_reg(Asm::Assembler<WriterT> &a, Asm::ModrmSib const &modrmsib) \
         { a.mov_rm ## size ## _reg(modrmsib); } \
     };
