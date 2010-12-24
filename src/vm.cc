@@ -531,38 +531,21 @@ static void emit_iadd(Asm::Assembler<WriterT> &a, RegId r_dest, RegId r_src)
     a.mov_rm64_reg(mem_2op(RAX, r1));
 }
 
-namespace {
-template <class WriterT, std::size_t S>
-struct ASM {
-    static void mov_rmX_reg(Asm::Assembler<WriterT> &a, Asm::ModrmSib const &modrmsib);
-};
-#define INST(size) \
-    template <class WriterT> \
-    struct ASM<WriterT, size/8> {                                 \
-        static void mov_rmX_reg(Asm::Assembler<WriterT> &a, Asm::ModrmSib const &modrmsib) \
-        { a.mov_rm ## size ## _reg(modrmsib); } \
-    };
-INST(8) INST(32) INST(64)
-#undef INST
-}
-
 template <class WriterT>
-static void emit_exit(Asm::Assembler<WriterT> &a, uint64_t const &bpfml, uint64_t const &spfml, bool &exit, RegId retreg)
+static void emit_exit(Asm::Assembler<WriterT> &a, uint64_t const &bpfml, uint64_t const &spfml, RegId retreg)
 {
     using namespace Asm;
 
-    move_vmreg_ptr_to_guaranteed_x86reg(a, RAX, retreg);
+    if (retreg != 0)
+        move_vmreg_ptr_to_guaranteed_x86reg(a, RAX, retreg);
+    else
+        a.mov_reg_imm64(RAX, 0);
 
     // Restore RBP and RSP.
     a.mov_reg_imm64(RCX, PTR(&bpfml));
     a.mov_reg_rm64(mem_2op(RBP, RCX));
     a.mov_reg_imm64(RCX, PTR(&spfml));
     a.mov_reg_rm64(mem_2op(RSP, RCX));
-
-    // Indicate that we don't want to trampoline.
-    a.mov_reg_imm64(RCX, PTR(&exit));
-    a.mov_reg_imm64(RDX, 1);
-    ASM<WriterT, sizeof(bool)*8>::mov_rmX_reg(a, mem_2op(RDX, RCX));
 
     a.leave(); // Now that we've reset ESP/EBP, calling leave/ret
     a.ret();   // will return from main_loop_.
@@ -636,7 +619,6 @@ static void save_regs_before_c_funcall(Asm::Assembler<WriterT> &a, uint8_t numre
 {
     using namespace Asm;
     for (int i = 0; i < sizeof(registers_to_save) / sizeof(Register) && i < numregs - SAVE_OFFSET; ++i) {
-        std::cout << "SAVE i" << i << "\n";
         Register r = registers_to_save[i];
         a.push_rm64(reg_1op(r));
     }
@@ -691,6 +673,20 @@ static void emit_debug_sayhi(Asm::Assembler<WriterT> &a, uint8_t current_num_vm_
     restore_regs_after_c_funcall(a, current_num_vm_registers);
 }
 
+namespace {
+template <class WriterT, std::size_t S>
+struct ASM {
+    static void mov_rmX_reg(Asm::Assembler<WriterT> &a, Asm::ModrmSib const &modrmsib);
+};
+#define INST(size) \
+    template <class WriterT> \
+    struct ASM<WriterT, size/8> {                                 \
+        static void mov_rmX_reg(Asm::Assembler<WriterT> &a, Asm::ModrmSib const &modrmsib) \
+        { a.mov_rm ## size ## _reg(modrmsib); } \
+    };
+INST(8) INST(32) INST(64)
+#undef INST
+}
 template <class WriterT>
 static void set_bool(Asm::Assembler<WriterT> &a, bool &var, bool tf)
 {
@@ -713,15 +709,15 @@ struct MainLoopState {
     uint64_t saved_registers[16];
     bool registers_are_saved;
     uint8_t current_num_vm_registers;
-    bool exit;
     uint64_t base_pointer_for_main_loop;
     uint64_t stack_pointer_for_main_loop;
 
     Mem::MemState mem_state;
 };
 
+static uint64_t inner_main_loop(MainLoopState &mls);
 template <class WriterT>
-static void jump_back_setting_start_to(MainLoopState &mls, Asm::Assembler<WriterT> &a, WriterT &w, std::size_t value)
+static void call_main_loop_setting_start_to(MainLoopState &mls, Asm::Assembler<WriterT> &a, WriterT &w, std::size_t value)
 {
     using namespace Asm;
 
@@ -733,13 +729,11 @@ static void jump_back_setting_start_to(MainLoopState &mls, Asm::Assembler<Writer
     a.mov_reg_imm64(RAX, value);
     a.mov_moffs64_rax(PTR(&(mls.start)));
 
-    // Restore the original base pointer and stack pointer.
-    a.mov_reg_imm64(RBP, mls.base_pointer_for_main_loop);
-    a.mov_reg_imm64(RSP, mls.stack_pointer_for_main_loop);
-
-    // Return from the main loop.
-    a.leave();
-    a.ret();
+    // Call the innner main loop.
+    a.mov_reg_imm64(RCX, PTR(inner_main_loop));
+    a.mov_reg_imm64(RDI, PTR(&mls));
+    a.mov_reg_imm64(RAX, 0);
+    a.call_rm64(reg_1op(RCX));
 }
 
 static uint64_t inner_main_loop(MainLoopState &mls)
@@ -747,21 +741,12 @@ static uint64_t inner_main_loop(MainLoopState &mls)
     using namespace Asm;
 
     if (mls.start >= mls.instructions.size()) {
-        mls.exit = true;
-        return 0;
-    }
-
-    // This could just be inline ASM, but since we already have an assembler,
-    // we may as well do it without making use of compiler-specific extensions.
-    if (mls.base_pointer_for_main_loop == 0) {
-        VectorWriter bpw;
-        VectorAssembler bpa(bpw);
-        bpa.mov_reg_imm64(RCX, PTR(&(mls.base_pointer_for_main_loop)));
-        bpa.mov_rm64_reg(mem_2op(RBP, RCX));
-        bpa.mov_reg_imm64(RCX, PTR(&(mls.stack_pointer_for_main_loop)));
-        bpa.mov_rm64_reg(mem_2op(RSP, RCX));
-        bpa.ret();
-        bpw.get_exec_func()();
+        // This could just be inline ASM, but since we already have an assembler,
+        // we may as well do it without making use of compiler-specific extensions.
+        VectorWriter evw;
+        VectorAssembler eva(evw);
+        emit_exit(eva, mls.base_pointer_for_main_loop, mls.stack_pointer_for_main_loop, 0);
+        evw.get_exec_func()(); // This will return from the outer main loop.
     }
 
     VectorAssemblerBroker::Entry e = mls.ab.get_writer_assembler_for(&*(mls.instructions.begin() + mls.start),
@@ -773,6 +758,9 @@ static uint64_t inner_main_loop(MainLoopState &mls)
 #ifdef DEBUG
     a->nop();
 #endif
+
+    // Kill the stack space used by 'inner_main_loop'.
+    a->leave();
 
     if (mls.registers_are_saved) {
         restore_all_regs(*a, mls.saved_registers);
@@ -799,7 +787,7 @@ static uint64_t inner_main_loop(MainLoopState &mls)
             case OP_NULL: assert(false);
             case OP_EXIT: {
                 last_instruction_exited = true;
-                emit_exit(*a, mls.base_pointer_for_main_loop, mls.stack_pointer_for_main_loop, mls.exit, i[1]);
+                emit_exit(*a, mls.base_pointer_for_main_loop, mls.stack_pointer_for_main_loop, i[1]);
             } break;
             case OP_INCRW: {
                 emit_incrw(*a, i[1]);
@@ -875,7 +863,7 @@ static uint64_t inner_main_loop(MainLoopState &mls)
                     std::printf("** SLOW JUMP (possible bug) **\n");
 #endif
                     // SLOW
-                    jump_back_setting_start_to(mls, *a, *w, bytecode_offset);
+                    call_main_loop_setting_start_to(mls, *a, *w, bytecode_offset);
                 }
             } break;
             default: assert(false);
@@ -886,7 +874,7 @@ static uint64_t inner_main_loop(MainLoopState &mls)
     }
 
     if (! last_instruction_exited)
-        jump_back_setting_start_to(mls, *a, *w, i - mls.instructions.begin());
+        call_main_loop_setting_start_to(mls, *a, *w, i - mls.instructions.begin());
 
 #ifdef DEBUG
     std::ofstream f;
@@ -902,6 +890,8 @@ static uint64_t inner_main_loop(MainLoopState &mls)
 
 uint64_t Vm::main_loop(std::vector<uint8_t> &instructions, std::size_t start, const std::size_t BLOB_SIZE)
 {
+    using namespace Asm;
+
     VectorAssemblerBroker ab(2 << 12);
 
     MainLoopState mls(ab, instructions);
@@ -910,12 +900,21 @@ uint64_t Vm::main_loop(std::vector<uint8_t> &instructions, std::size_t start, co
     mls.BLOB_SIZE = BLOB_SIZE;
     mls.registers_are_saved = false;
     mls.current_num_vm_registers = 0;
-    mls.exit = false;
     mls.base_pointer_for_main_loop = 0;
     mls.stack_pointer_for_main_loop = 0;
 
-    uint64_t r = 0;
-    while (! mls.exit)
-        r = inner_main_loop(mls);
-    return r;
+    if (mls.base_pointer_for_main_loop == 0) {
+        // This could just be inline ASM, but since we already have an assembler,
+        // we may as well do it without making use of compiler-specific extensions.
+        VectorWriter bpw;
+        VectorAssembler bpa(bpw);
+        bpa.mov_reg_imm64(RCX, PTR(&(mls.base_pointer_for_main_loop)));
+        bpa.mov_rm64_reg(mem_2op(RBP, RCX));
+        bpa.mov_reg_imm64(RCX, PTR(&(mls.stack_pointer_for_main_loop)));
+        bpa.mov_rm64_reg(mem_2op(RSP, RCX));
+        bpa.ret();
+        bpw.get_exec_func()();
+    }
+
+    return inner_main_loop(mls);
 }
