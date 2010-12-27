@@ -380,6 +380,7 @@ Vm::VectorAssemblerBroker::Entry const &Vm::VectorAssemblerBroker::get_writer_as
         MapIt it2;
         int i;
         for (i = 0, it2 = items.begin(); i < 5 && it2 != items.end(); ++i, ++it2) {
+            break;
             CountingVectorWriter *w = it2->second->writer;
             if (w->size() < 2000) {
                 w->clear();
@@ -480,6 +481,24 @@ static void *my_malloc(size_t bytes)
     return r;
 }
 
+struct MainLoopState {
+    MainLoopState(Vm::VectorAssemblerBroker &ab_, std::vector<uint8_t> &instructions_)
+        : ab(ab_), instructions(instructions_) { }
+    
+    Vm::VectorAssemblerBroker &ab;
+    std::vector<uint8_t> &instructions;
+    std::size_t start;
+    std::vector<uint8_t>::const_iterator position_of_last_incrw;
+    std::size_t BLOB_SIZE;
+    uint64_t saved_registers[16];
+    bool registers_are_saved;
+    uint8_t current_num_vm_registers;
+    uint64_t initial_base_pointer_for_main_loop;
+    uint64_t initial_stack_pointer_for_main_loop;
+
+    Mem::MemState mem_state;
+};
+
 static void *call_alloc_tagged_mem(Mem::MemState &ms, std::size_t size, unsigned tag)
 { ms.alloc_tagged_mem(size, tag); }
 // Emit code to allocate tagged memory.
@@ -487,21 +506,21 @@ static void *call_alloc_tagged_mem(Mem::MemState &ms, std::size_t size, unsigned
 // is how the Mem::MemState::Allocation structure is returned according
 // to the x86-64 ABI.)
 template <class WriterT>
-static void emit_malloc_constsize(Asm::Assembler<WriterT> &a, Mem::MemState &mem_state, uint8_t current_num_vm_registers, std::size_t size, RegId ptr_dest, unsigned tag)
+static void emit_malloc_constsize(MainLoopState const &mls, Asm::Assembler<WriterT> &a, std::size_t size, RegId ptr_dest, unsigned tag)
 {
     using namespace Asm;
 
     assert(tag < 4);
 
-    save_regs_before_c_funcall(a, current_num_vm_registers);
-    a.mov_reg_imm64(RDI, PTR(&mem_state));
+    save_regs_before_c_funcall(a, mls.current_num_vm_registers);
+    a.mov_reg_imm64(RDI, PTR(&(mls.mem_state)));
     a.mov_reg_imm64(RSI, static_cast<uint64_t>(size));
     a.mov_reg_imm64(RDX, static_cast<uint64_t>(tag));
     a.mov_reg_imm64(RAX, 0);
     a.mov_reg_imm64(RCX, PTR(call_alloc_tagged_mem));
     a.call_rm64(reg_1op(RCX));
     move_x86reg_to_vmreg_ptr(a, ptr_dest, RDX);
-    restore_regs_after_c_funcall(a, current_num_vm_registers);
+    restore_regs_after_c_funcall(a, mls.current_num_vm_registers);
 }
 
 template <class WriterT>
@@ -516,10 +535,10 @@ static void emit_incrw(Asm::Assembler<WriterT> &a, RegId num_regs)
 }
 
 template <class WriterT>
-static void emit_ldi(Asm::Assembler<WriterT> &a, Mem::MemState &mem_state, uint8_t current_num_vm_registers, RegId ptr_dest, uint64_t val)
+static void emit_ldi(MainLoopState const &mls, Asm::Assembler<WriterT> &a, RegId ptr_dest, uint64_t val)
 {
     using namespace Asm;
-    emit_malloc_constsize(a, mem_state, current_num_vm_registers, 8, ptr_dest, TAG_INT); // Leaves untagged address in RAX.
+    emit_malloc_constsize(mls, a, 8, ptr_dest, TAG_INT); // Leaves untagged address in RAX.
     a.mov_reg_imm64(RCX, val);
     a.mov_rm64_reg(mem_2op(RCX, RAX));
 }
@@ -546,7 +565,7 @@ static void emit_iadd(Asm::Assembler<WriterT> &a, RegId r_dest, RegId r_src)
 }
 
 template <class WriterT>
-static void emit_exit(Asm::Assembler<WriterT> &a, uint64_t const &bpfml, uint64_t const &spfml, RegId retreg)
+static void emit_exit(MainLoopState const &mls, Asm::Assembler<WriterT> &a, RegId retreg)
 {
     using namespace Asm;
 
@@ -556,9 +575,9 @@ static void emit_exit(Asm::Assembler<WriterT> &a, uint64_t const &bpfml, uint64_
         a.mov_reg_imm64(RAX, 0);
 
     // Restore RBP and RSP.
-    a.mov_reg_imm64(RCX, PTR(&bpfml));
+    a.mov_reg_imm64(RCX, PTR(&(mls.initial_base_pointer_for_main_loop)));
     a.mov_reg_rm64(mem_2op(RBP, RCX));
-    a.mov_reg_imm64(RCX, PTR(&spfml));
+    a.mov_reg_imm64(RCX, PTR(&(mls.initial_stack_pointer_for_main_loop)));
     a.mov_reg_rm64(mem_2op(RSP, RCX));
 
     a.leave(); // Now that we've reset ESP/EBP, calling leave/ret
@@ -658,7 +677,7 @@ static void print_vm_reg(RegId rid, uint64_t tagged_ptr)
     else assert(false);
 }
 template <class WriterT>
-static void emit_debug_printreg(Asm::Assembler<WriterT> &a, RegId r, uint8_t current_num_vm_registers)
+static void emit_debug_printreg(MainLoopState const &mls, Asm::Assembler<WriterT> &a, RegId r)
 {
     using namespace Asm;
 
@@ -668,23 +687,23 @@ static void emit_debug_printreg(Asm::Assembler<WriterT> &a, RegId r, uint8_t cur
     a.mov_reg_imm32(EDI, static_cast<uint32_t>(r));
     move_vmreg_ptr_to_guaranteed_x86reg(a, RSI, r);
 
-    save_regs_before_c_funcall(a, current_num_vm_registers);
+    save_regs_before_c_funcall(a, mls.current_num_vm_registers);
     a.mov_reg_imm64(RCX, PTR(print_vm_reg));
     a.mov_reg_imm64(RAX, 0);
     a.call_rm64(reg_1op(RCX));
-    restore_regs_after_c_funcall(a, current_num_vm_registers);
+    restore_regs_after_c_funcall(a, mls.current_num_vm_registers);
 }
 
 static void sayhi() { std::printf("HI\n"); }
 template <class WriterT>
-static void emit_debug_sayhi(Asm::Assembler<WriterT> &a, uint8_t current_num_vm_registers)
+static void emit_debug_sayhi(MainLoopState const &mls, Asm::Assembler<WriterT> &a)
 {
     using namespace Asm;
 
     a.mov_reg_imm64(RCX, PTR(sayhi));
-    save_regs_before_c_funcall(a, current_num_vm_registers);
+    save_regs_before_c_funcall(a, mls.current_num_vm_registers);
     a.call_rm64(reg_1op(RCX));
-    restore_regs_after_c_funcall(a, current_num_vm_registers);
+    restore_regs_after_c_funcall(a, mls.current_num_vm_registers);
 }
 
 namespace {
@@ -726,24 +745,6 @@ static void set_bool(Asm::Assembler<WriterT> &a, bool &var, bool tf)
         bpw__.get_exec_func()(); \
     } while (0);
 
-struct MainLoopState {
-    MainLoopState(Vm::VectorAssemblerBroker &ab_, std::vector<uint8_t> &instructions_)
-        : ab(ab_), instructions(instructions_) { }
-    
-    Vm::VectorAssemblerBroker &ab;
-    std::vector<uint8_t> &instructions;
-    std::size_t start;
-    std::vector<uint8_t>::const_iterator position_of_last_incrw;
-    std::size_t BLOB_SIZE;
-    uint64_t saved_registers[16];
-    bool registers_are_saved;
-    uint8_t current_num_vm_registers;
-    uint64_t initial_base_pointer_for_main_loop;
-    uint64_t initial_stack_pointer_for_main_loop;
-
-    Mem::MemState mem_state;
-};
-
 static uint64_t inner_main_loop(MainLoopState &mls);
 template <class WriterT>
 static void call_main_loop_setting_start_to(MainLoopState &mls, Asm::Assembler<WriterT> &a, WriterT &w, std::size_t value)
@@ -774,7 +775,7 @@ static uint64_t inner_main_loop(MainLoopState &mls)
         // we may as well do it without making use of compiler-specific extensions.
         VectorWriter evw;
         VectorAssembler eva(evw);
-        emit_exit(eva, mls.initial_base_pointer_for_main_loop, mls.initial_stack_pointer_for_main_loop, 0);
+        emit_exit(mls, eva, 0);
         evw.get_exec_func()(); // This will return from the outer main loop.
     }
 
@@ -827,7 +828,7 @@ static uint64_t inner_main_loop(MainLoopState &mls)
             case OP_NULL: assert(false);
             case OP_EXIT: {
                 last_instruction_exited = true;
-                emit_exit(*a, mls.initial_base_pointer_for_main_loop, mls.initial_stack_pointer_for_main_loop, i[1]);
+                emit_exit(mls, *a, i[1]);
             } break;
             case OP_INCRW: {
                 emit_incrw(*a, i[1]);
@@ -835,11 +836,11 @@ static uint64_t inner_main_loop(MainLoopState &mls)
                 mls.current_num_vm_registers = i[1];
             } break;
             case OP_LDI16: {
-                emit_ldi(*a, mls.mem_state, mls.current_num_vm_registers, i[1], i[2] + ((uint64_t)i[3] << 8));
+                emit_ldi(mls, *a, i[1], i[2] + ((uint64_t)i[3] << 8));
             } break;
             case OP_LDI64: {
 #define C(x) static_cast<uint64_t>(x)
-                emit_ldi(*a, mls.mem_state, mls.current_num_vm_registers, i[1],
+                emit_ldi(mls, *a, i[1],
                          i[4] + (C(i[5]) << 8) + (C(i[6]) << 16) +
                          (C(i[7]) << 24) + (C(i[8]) << 32) +
                          (C(i[9]) << 40) + (C(i[10]) << 48) +
@@ -854,10 +855,10 @@ static uint64_t inner_main_loop(MainLoopState &mls)
                 emit_iadd(*a, i[1], i[2]);
             } break;
             case OP_DEBUG_PRINTREG: {
-                emit_debug_printreg(*a, i[1], mls.current_num_vm_registers);
+                emit_debug_printreg(mls, *a, i[1]);
             } break;
             case OP_DEBUG_SAYHI: {
-                emit_debug_sayhi(*a, mls.current_num_vm_registers);
+                emit_debug_sayhi(mls, *a);
             } break;
             case OP_CJMP:
             case OP_CJE:
