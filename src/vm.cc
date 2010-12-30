@@ -19,11 +19,21 @@
 // * R10-R15 hold the first 8 registers.
 //
 
+using namespace Vm;
+
 // TODO: Figure out why using R11D and R12D causes problems.
-const Asm::Register vm_regs_x86_regs[] = { Asm::R13D, Asm::R14D, Asm::R15D, Asm::RBX };
+// When debugging, we want to check that register saving is working properly. Hence,
+// we use registers that need to be saved before using those that don't.
+#ifdef DEBUG
+const Asm::Register vm_regs_x86_regs[] = { Asm::RSI, /*Asm::RDI,*/ Asm::R13D, Asm::R14D, Asm::R15D, Asm::RBX  };
+const bool vm_regs_x86_regs_to_save[] =  { true,     /*true,*/     false,     false,     false,     true };
+#else
+//const Asm::Register vm_regs_x86_regs[] = { Asm::R11D, Asm::R12D, Asm::R13D, Asm::R14D, Asm::R15D, Asm::RBX, Asm::RDI, Asm::RSI };
+//const bool vm_regs_x86_regs_to_save[] =  { false,     false,     false,     false,     false,     true,     true,     true };
+#endif
 const int NUM_VM_REGS_IN_X86_REGS = sizeof(vm_regs_x86_regs)/sizeof(Asm::Register);
 
-using namespace Vm;
+static Asm::Register registers_to_save_before_c_funcall[] = { Asm::RBX };
 
 const Opcode Vm::FIRST_OP = OP_EXIT;
 
@@ -521,8 +531,8 @@ static void emit_malloc_constsize(MainLoopState const &mls, Asm::Assembler<Write
     a.mov_reg_imm64(RAX, 0);
     a.mov_reg_imm64(RCX, PTR(call_alloc_tagged_mem));
     a.call_rm64(reg_1op(RCX));
-    move_x86reg_to_vmreg_ptr(a, ptr_dest, RDX);
     restore_regs_after_c_funcall(a, mls.current_num_vm_registers);
+    move_x86reg_to_vmreg_ptr(a, ptr_dest, RDX);
 }
 
 template <class WriterT>
@@ -646,25 +656,26 @@ static void restore_all_regs(Asm::Assembler<WriterT> &a, uint64_t *buffer, Asm::
 // Save those registers which
 //     (i)  belong to the caller according to the X86-64 ABI.
 //     (ii) are used to hold VM registers.
-static const int SAVE_OFFSET = 3;
-static Asm::Register registers_to_save[] = { Asm::RBX };
-//static Asm::Register registers_to_save[] = { /*Asm::RAX,*/ Asm::RCX, Asm::RDX, Asm::RBX, Asm::RSP, Asm::RBP, Asm::RSI, Asm::RDI, Asm::R8D, Asm::R9D, Asm::R10D, Asm::R11D, Asm::R12D, Asm::R13D, Asm::R14D, Asm::R15D };
 template <class WriterT>
 static void save_regs_before_c_funcall(Asm::Assembler<WriterT> &a, uint8_t numregs)
 {
     using namespace Asm;
-    for (int i = 0; i < sizeof(registers_to_save) / sizeof(Register) && i < numregs - SAVE_OFFSET; ++i) {
-        Register r = registers_to_save[i];
-        a.push_rm64(reg_1op(r));
+    for (int i = 0; i < sizeof(vm_regs_x86_regs) / sizeof(Register) && i < numregs; ++i) {
+        if (vm_regs_x86_regs_to_save[i]) {
+            Register r = vm_regs_x86_regs[i];
+            a.push_rm64(reg_1op(r));
+        }
     }
 }
 template <class WriterT>
 static void restore_regs_after_c_funcall(Asm::Assembler<WriterT> &a, uint8_t numregs)
 {
     using namespace Asm;
-    for (int i = std::min(static_cast<long>(sizeof(registers_to_save) / sizeof(Register)), static_cast<long>(numregs - SAVE_OFFSET)) - 1; i >= 0; --i) {
-        Register r = registers_to_save[i];
-        a.pop_rm64(reg_1op(r));
+    for (int i = std::min(static_cast<int>(numregs), static_cast<int>((sizeof(vm_regs_x86_regs) / sizeof(Register)) - 1)); i >=0; --i) {
+        if (vm_regs_x86_regs_to_save[i]) {
+            Register r = vm_regs_x86_regs[i];
+            a.pop_rm64(reg_1op(r));
+        }
     }
 }
 
