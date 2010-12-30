@@ -27,7 +27,9 @@ using namespace Vm;
 
 const Opcode Vm::FIRST_OP = OP_EXIT;
 
-const unsigned Vm::MAX_REG_ID = 127;
+// We can have 127 on the machine stack and some number in registers.
+const unsigned Vm::MAX_REG_ID = 127 + 4;
+const unsigned MAX_VM_REGS = MAX_REG_ID-1;
 
 static char const *op_names[] = {
     "EXIT",
@@ -69,7 +71,7 @@ static Operand const op_operand_specs[][4] = {
 
     { OPR_REGISTER, OPR_FLAGS, END },      // JMP
     { OPR_IMM16, /*OPR_FLAGS,*/ END },     // CJMP
-    { OPR_REGISTER, END },                 // CALL
+    { OPR_REGISTER, OPR_IMM16, END },      // CALL
     { OPR_REGISTER, END },                 // RET
     { OPR_REGISTER, OPR_REGISTER, END },   // CMP
     { OPR_REGISTER, END },                 // JE
@@ -438,7 +440,7 @@ Vm::VectorAssemblerBroker::Entry const *Vm::VectorAssemblerBroker::known_to_be_l
 
 static int8_t RegId_to_disp(RegId id)
 {
-    assert(id <= 127 && id > NUM_VM_REGS_IN_X86_REGS);
+    assert(id <= MAX_REG_ID && id > NUM_VM_REGS_IN_X86_REGS);
     return (id-NUM_VM_REGS_IN_X86_REGS) * -8;
 }
 
@@ -666,6 +668,30 @@ static void restore_regs_after_c_funcall(Asm::Assembler<WriterT> &a, uint8_t num
     }
 }
 
+template <class WriterT>
+static void emit_call(MainLoopState const &mls, Asm::Assembler<WriterT> &a, RegId r, unsigned num_args)
+{
+    using namespace Asm;
+
+    assert(num_args < MAX_VM_REGS);
+
+    move_vmreg_ptr_to_x86reg(a, RCX, r);
+    for (int i = 0; i < NUM_VM_REGS_IN_X86_REGS; ++i) {
+        a.push_rm64(reg_1op(vm_regs_x86_regs[i]));
+    }
+    a.mov_reg_imm64(RDI, num_args);
+    a.call_rm64(reg_1op(RCX));
+    for (int i = NUM_VM_REGS_IN_X86_REGS; i >=0; --i) {
+        a.pop_rm64(reg_1op(vm_regs_x86_regs[i]));
+    }
+}
+
+template <class WriterT>
+static void emit_ret(MainLoopState const &mls, Asm::Assembler<WriterT> &a)
+{
+    a.ret();
+}
+
 static void print_vm_reg(RegId rid, uint64_t tagged_ptr)
 {
     uint64_t tag = tagged_ptr & 0x0000000000000003;
@@ -859,6 +885,12 @@ static uint64_t inner_main_loop(MainLoopState &mls)
             } break;
             case OP_DEBUG_SAYHI: {
                 emit_debug_sayhi(mls, *a);
+            } break;
+            case OP_CALL: {
+                emit_call(mls, *a, i[1], i[2] + (static_cast<unsigned>(i[3]) << 8));
+            } break;
+            case OP_RET: {
+                emit_ret(mls, *a);
             } break;
             case OP_CJMP:
             case OP_CJE:
