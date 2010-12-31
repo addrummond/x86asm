@@ -17,9 +17,34 @@ static void parse_or_die(const char *code, std::vector<uint8_t> &instructions)
 }
 
 //
+// Simple loading.
+//
+void test1()
+{
+    const char *code =
+        " INCRW 2"
+        " LDI64 1 2"
+//        " LDI16 2 3"
+        " DEBUG_PRINTREG 1"
+        " DEBUG_PRINTREG 1"
+        " EXIT 1";
+
+    std::vector<uint8_t> instructions;
+    parse_or_die(code, instructions);
+    Util::debug_hex_print(&instructions[0], instructions.size());
+
+    uint64_t rval = Vm::main_loop(instructions, 0, 2 /*small BLOB_SIZE to maximize chance of triggering bugs*/);
+    assert(rval != 0);
+    uint64_t rvali = *((uint64_t*)rval);
+    std::printf("TEST1: rval=%lli\n", rvali);
+    assert(rvali == 2);
+    std::printf("* OK\n\n");
+}
+
+//
 // Simple loading/addition.
 // 
-void test1()
+void test2()
 {
     const char *code =
         " INCRW 2"
@@ -38,7 +63,7 @@ void test1()
     uint64_t rval = Vm::main_loop(instructions, 0, 2 /*small BLOB_SIZE to maximize chance of triggering bugs*/);
     assert(rval != 0);
     uint64_t rvali = *((uint64_t*)rval);
-    std::printf("TEST1: rval=%lli\n", rvali);
+    std::printf("TEST2: rval=%lli\n", rvali);
     assert(rvali == 5);
     std::printf("* OK\n\n");
 }
@@ -46,7 +71,7 @@ void test1()
 //
 // Infinite loop.
 //
-void test2()
+void test3()
 {
     const char *code =
         "  INCRW 2"
@@ -67,7 +92,7 @@ void test2()
 //
 // Counting loop.
 //
-void test3()
+void test4()
 {
     const char *code =
         "  INCRW 3"
@@ -87,7 +112,7 @@ void test3()
     uint64_t rval = Vm::main_loop(instructions, 0, 100);
     assert(rval != 0);
     uint64_t rvali = *((uint64_t*)rval);
-    std::printf("TEST3: rval=%lli\n", rvali);
+    std::printf("TEST4: rval=%lli\n", rvali);
     assert(rvali == 3);
     std::printf("* OK\n\n");
 }
@@ -96,7 +121,7 @@ void test3()
 // A simple incrementing loop. If compilation is working properly,
 // this shouldn't take any perceptible amount of time.
 //
-void test4()
+void test5()
 {
     const char *code =
         "  INCRW 3"           // 0
@@ -116,7 +141,7 @@ void test4()
     uint64_t rval = Vm::main_loop(instructions, 0, 100);
     assert(rval != 0);
     uint64_t rvali = *((uint64_t*)rval);
-    std::printf("TEST 4: rval=%lli\n", rvali);
+    std::printf("TEST 5: rval=%lli\n", rvali);
     assert(rvali == 20000000);
     std::printf("* OK\n\n");
 }
@@ -124,9 +149,11 @@ void test4()
 int main()
 {
     test1();
-//    test2(); // NOT RUN BY DEFAULT AS IT IS AN INFINITE LOOP.
-    test3();
-    test4();
+//    test2();
+// //    test3(); // NOT RUN BY DEFAULT AS IT IS AN INFINITE LOOP.
+//    test3();
+//    test4();
+//    test5();
 
     return 0;
 }

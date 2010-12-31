@@ -331,7 +331,7 @@ Vm::VectorAssemblerBroker::Entry::Entry(Asm::CountingVectorWriter *writer_, Asm:
     : writer(writer_), assembler(assembler_), offset(offset_) { }
 
 Vm::VectorAssemblerBroker::VectorAssemblerBroker(const std::size_t MAX_BYTES_)
-    : MAX_BYTES(MAX_BYTES_) { }
+    : MAX_BYTES(MAX_BYTES_), current_size(MAX_BYTES_) { }
 
 std::size_t Vm::VectorAssemblerBroker::size()
 { return items.size(); }
@@ -458,8 +458,10 @@ template <class WriterT>
 static void move_x86reg_to_vmreg_ptr(Asm::Assembler<WriterT> &a, RegId vmreg, Asm::Register x86reg)
 {
     using namespace Asm;
-    if (vmreg <= NUM_VM_REGS_IN_X86_REGS)
-        a.mov_reg_reg64(vm_regs_x86_regs[vmreg - 1], x86reg);
+    if (vmreg <= NUM_VM_REGS_IN_X86_REGS) {
+        if (x86reg != vm_regs_x86_regs[vmreg-1])
+            a.mov_reg_reg64(vm_regs_x86_regs[vmreg-1], x86reg);
+    }
     else
         a.mov_rm64_reg(mem_2op_short(x86reg, RBP, NOT_A_REGISTER/*index*/, SCALE_1, RegId_to_disp(vmreg)));
 }
@@ -478,8 +480,10 @@ template <class WriterT>
 static void move_vmreg_ptr_to_guaranteed_x86reg(Asm::Assembler<WriterT> &a, Asm::Register x86reg, RegId vmreg)
 {
     using namespace Asm;
-    if (vmreg <= NUM_VM_REGS_IN_X86_REGS)
-        a.mov_reg_reg64(x86reg, vm_regs_x86_regs[vmreg - 1]);
+    if (vmreg <= NUM_VM_REGS_IN_X86_REGS) {
+        if (x86reg != vm_regs_x86_regs[vmreg-1])
+            a.mov_reg_reg64(x86reg, vm_regs_x86_regs[vmreg-1]);
+    }
     else
         a.mov_reg_rm64(mem_2op_short(x86reg, RBP, NOT_A_REGISTER/*index*/, SCALE_1, RegId_to_disp(vmreg)));
 }
@@ -509,6 +513,11 @@ struct MainLoopState {
     uint64_t initial_stack_pointer_for_main_loop;
 
     Mem::MemState mem_state;
+
+#ifdef DEBUG
+    struct Asm::CountingVectorWriter *last_writer;
+    std::size_t last_asm_offset;
+#endif
 };
 
 static void *call_alloc_tagged_mem(Mem::MemState &ms, std::size_t size, unsigned tag)
@@ -624,6 +633,8 @@ static void save_all_regs(Asm::CountingVectorAssembler &a, uint64_t *buffer)
 {
     using namespace Asm;
 
+    assert(buffer != NULL);
+
     a.push_reg64(RAX);
     a.mov_reg_imm64(RAX, PTR(buffer));
     unsigned i = 1;
@@ -640,6 +651,8 @@ template <class WriterT>
 static void restore_all_regs(Asm::Assembler<WriterT> &a, uint64_t *buffer, Asm::Register except=Asm::NOT_A_REGISTER)
 {
     using namespace Asm;
+
+    assert(buffer != NULL);
 
     a.mov_reg_imm64(RAX, PTR(buffer));
     unsigned i = 1;
@@ -831,6 +844,7 @@ static uint64_t inner_main_loop(MainLoopState &mls)
 
     CountingVectorAssembler *a = e.assembler;
     CountingVectorWriter *w = e.writer;
+//    std::printf("WRITER: %llx\n", w);
 
     // Makes it easier to see which ASM is for which VM instruction when debugging.
 #ifdef DEBUG
@@ -838,7 +852,7 @@ static uint64_t inner_main_loop(MainLoopState &mls)
 #endif
 
     // Kill the stack space used by 'inner_main_loop'.
-    a->leave();
+//    a->leave();
 
     if (mls.registers_are_saved) {
         restore_all_regs(*a, mls.saved_registers);
@@ -961,10 +975,16 @@ static uint64_t inner_main_loop(MainLoopState &mls)
         call_main_loop_setting_start_to(mls, *a, *w, i - mls.instructions.begin());
 
 #ifdef DEBUG
+    if (mls.last_writer != w)
+        mls.last_asm_offset = 0;
+
     std::ofstream f;
-    f.open("/tmp/vm_debug_raw", std::ios::app);
-    f.write(reinterpret_cast<char *>(w->get_mem(mls.start)), w->size());
+    f.open("/tmp/vm_debug_raw", std::ios::app | std::ios::binary);
+    f.write(reinterpret_cast<char *>(w->get_mem(mls.last_asm_offset)), w->size() - mls.last_asm_offset);
     f.close();
+
+    mls.last_asm_offset = w->size();
+    mls.last_writer = w;
 #endif
 
     w->get_exec_func(e.offset)();
@@ -984,6 +1004,10 @@ uint64_t Vm::main_loop(std::vector<uint8_t> &instructions, std::size_t start, co
     mls.BLOB_SIZE = BLOB_SIZE;
     mls.registers_are_saved = false;
     mls.current_num_vm_registers = 0;
+#ifdef DEBUG
+    mls.last_writer = NULL;
+    mls.last_asm_offset = 0;
+#endif
 
     GET_BASE_POINTER_AND_STACK_POINTER(mls.initial_base_pointer_for_main_loop,
                                        mls.initial_stack_pointer_for_main_loop);
