@@ -24,7 +24,7 @@ void test1()
     const char *code =
         " INCRW 2"
         " LDI64 1 2"
-//        " LDI16 2 3"
+        " LDI16 2 3"
         " DEBUG_PRINTREG 1"
         " DEBUG_PRINTREG 1"
         " EXIT 1";
@@ -149,11 +149,11 @@ void test5()
 int main()
 {
     test1();
-//    test2();
+    test2();
 // //    test3(); // NOT RUN BY DEFAULT AS IT IS AN INFINITE LOOP.
-//    test3();
-//    test4();
-//    test5();
+    test3();
+    test4();
+    test5();
 
     return 0;
 }

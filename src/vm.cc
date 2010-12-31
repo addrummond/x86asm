@@ -7,6 +7,7 @@
 #include <cstring>
 #include <cerrno>
 #include <iostream>
+#include <util.hh>
 #ifdef DEBUG
 #include <fstream>
 #endif
@@ -25,8 +26,8 @@ using namespace Vm;
 // When debugging, we want to check that register saving is working properly. Hence,
 // we use registers that need to be saved before using those that don't.
 #ifdef DEBUG
-const Asm::Register vm_regs_x86_regs[] = { Asm::RSI, /*Asm::RDI,*/ Asm::R13D, Asm::R14D, Asm::R15D, Asm::RBX  };
-const bool vm_regs_x86_regs_to_save[] =  { true,     /*true,*/     false,     false,     false,     true };
+const Asm::Register vm_regs_x86_regs[] = { Asm::RSI, Asm::RDI, Asm::R13D, Asm::R14D, Asm::R15D, Asm::RBX  };
+const bool vm_regs_x86_regs_to_save[] =  { true,     true,     false,     false,     false,     true };
 #else
 //const Asm::Register vm_regs_x86_regs[] = { Asm::R11D, Asm::R12D, Asm::R13D, Asm::R14D, Asm::R15D, Asm::RBX, Asm::RDI, Asm::RSI };
 //const bool vm_regs_x86_regs_to_save[] =  { false,     false,     false,     false,     false,     true,     true,     true };
@@ -508,7 +509,7 @@ struct MainLoopState {
     std::size_t BLOB_SIZE;
     uint64_t saved_registers[16];
     bool registers_are_saved;
-    uint8_t current_num_vm_registers;
+    std::size_t current_num_vm_registers;
     uint64_t initial_base_pointer_for_main_loop;
     uint64_t initial_stack_pointer_for_main_loop;
 
@@ -533,14 +534,14 @@ static void emit_malloc_constsize(MainLoopState const &mls, Asm::Assembler<Write
 
     assert(tag < 4);
 
-    save_regs_before_c_funcall(a, mls.current_num_vm_registers);
+    save_regs_before_c_funcall(mls, a);
     a.mov_reg_imm64(RDI, PTR(&(mls.mem_state)));
     a.mov_reg_imm64(RSI, static_cast<uint64_t>(size));
     a.mov_reg_imm64(RDX, static_cast<uint64_t>(tag));
     a.mov_reg_imm64(RAX, 0);
     a.mov_reg_imm64(RCX, PTR(call_alloc_tagged_mem));
     a.call_rm64(reg_1op(RCX));
-    restore_regs_after_c_funcall(a, mls.current_num_vm_registers);
+    restore_regs_after_c_funcall(mls, a);
     move_x86reg_to_vmreg_ptr(a, ptr_dest, RDX);
 }
 
@@ -670,22 +671,26 @@ static void restore_all_regs(Asm::Assembler<WriterT> &a, uint64_t *buffer, Asm::
 //     (i)  belong to the caller according to the X86-64 ABI.
 //     (ii) are used to hold VM registers.
 template <class WriterT>
-static void save_regs_before_c_funcall(Asm::Assembler<WriterT> &a, uint8_t numregs)
+static void save_regs_before_c_funcall(MainLoopState const &mls, Asm::Assembler<WriterT> &a)
 {
     using namespace Asm;
-    for (int i = 0; i < sizeof(vm_regs_x86_regs) / sizeof(Register) && i < numregs; ++i) {
+    for (int i = 0; i < sizeof(vm_regs_x86_regs) / sizeof(Register) && i < mls.current_num_vm_registers; ++i) {
+//    for (int i = 0; i < sizeof(vm_regs_x86_regs) / sizeof(Register); ++i) {
         if (vm_regs_x86_regs_to_save[i]) {
+//        if (true) {
             Register r = vm_regs_x86_regs[i];
             a.push_rm64(reg_1op(r));
         }
     }
 }
 template <class WriterT>
-static void restore_regs_after_c_funcall(Asm::Assembler<WriterT> &a, uint8_t numregs)
+static void restore_regs_after_c_funcall(MainLoopState const &mls, Asm::Assembler<WriterT> &a)
 {
     using namespace Asm;
-    for (int i = std::min(static_cast<int>(numregs), static_cast<int>((sizeof(vm_regs_x86_regs) / sizeof(Register)) - 1)); i >=0; --i) {
+    for (int i = std::min(static_cast<int>(mls.current_num_vm_registers), static_cast<int>((sizeof(vm_regs_x86_regs) / sizeof(Register)))) - 1; i >= 0; --i) {
+//    for (int i = (sizeof(vm_regs_x86_regs) / sizeof(Register)) - 1; i >= 0; --i) {
         if (vm_regs_x86_regs_to_save[i]) {
+//        if (true) {
             Register r = vm_regs_x86_regs[i];
             a.pop_rm64(reg_1op(r));
         }
@@ -731,17 +736,14 @@ static void emit_debug_printreg(MainLoopState const &mls, Asm::Assembler<WriterT
 {
     using namespace Asm;
 
-    // Bit naughty (not good if we start using multiple threads).
-    static uint64_t regs[16];
-
     a.mov_reg_imm32(EDI, static_cast<uint32_t>(r));
     move_vmreg_ptr_to_guaranteed_x86reg(a, RSI, r);
 
-    save_regs_before_c_funcall(a, mls.current_num_vm_registers);
+    save_regs_before_c_funcall(mls, a);
     a.mov_reg_imm64(RCX, PTR(print_vm_reg));
     a.mov_reg_imm64(RAX, 0);
     a.call_rm64(reg_1op(RCX));
-    restore_regs_after_c_funcall(a, mls.current_num_vm_registers);
+    restore_regs_after_c_funcall(mls, a);
 }
 
 static void sayhi() { std::printf("HI\n"); }
@@ -751,9 +753,9 @@ static void emit_debug_sayhi(MainLoopState const &mls, Asm::Assembler<WriterT> &
     using namespace Asm;
 
     a.mov_reg_imm64(RCX, PTR(sayhi));
-    save_regs_before_c_funcall(a, mls.current_num_vm_registers);
+    save_regs_before_c_funcall(mls, a);
     a.call_rm64(reg_1op(RCX));
-    restore_regs_after_c_funcall(a, mls.current_num_vm_registers);
+    restore_regs_after_c_funcall(mls, a);
 }
 
 namespace {
@@ -884,7 +886,8 @@ static uint64_t inner_main_loop(MainLoopState &mls)
             case OP_INCRW: {
                 emit_incrw(*a, i[1]);
                 mls.position_of_last_incrw = i;
-                mls.current_num_vm_registers = i[1];
+                mls.current_num_vm_registers = (uint8_t)i[1];
+                assert(mls.current_num_vm_registers != 0);
             } break;
             case OP_LDI16: {
                 emit_ldi(mls, *a, i[1], i[2] + ((uint64_t)i[3] << 8));
