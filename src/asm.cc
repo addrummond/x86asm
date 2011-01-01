@@ -66,6 +66,7 @@ unsigned Asm::register_byte_size(Register reg) { assert(reg <= BH); return regis
 
 static uint8_t raw_modrm(uint8_t mod, uint8_t rm, uint8_t reg)
 {
+//    std::printf("raw MOD %x RM %x REG %x\n", mod, rm, reg);
     assert(mod < 5 && rm < 9 && reg < 9);
     return (mod << 6) | (reg << 3) | rm;
 }
@@ -82,7 +83,7 @@ static bool is_gp8_register(Register reg)
 
 static bool requires_sib(ModrmSib const &modrmsib)
 {
-    return !(modrmsib.disp_size == DISP_SIZE_NONE || modrmsib.scale == SCALE_1);
+    return !(modrmsib.disp_size == DISP_SIZE_NONE || modrmsib.scale == SCALE_1 || modrmsib.rm_reg == NOT_A_REGISTER);
 }
 
 struct RawModrmSib {
@@ -115,26 +116,23 @@ static RawModrmSib raw_modrmsib(ModrmSib const &modrmsib)
          mod = 3;
          r.has_disp = false;
     }
-    else if ((modrmsib.disp == 0 && modrmsib.rm_reg != RBP && modrmsib.rm_reg != RSP && modrmsib.rm_reg != R12D && modrmsib.rm_reg != R13D) ||
-             modrmsib.rm_reg == NOT_A_REGISTER) {
-        mod = 0;
-        r.has_disp = false;
-    }
     else if(modrmsib.disp_size == DISP_SIZE_8)
         mod = 1;
     else if (modrmsib.disp_size == DISP_SIZE_32)
         mod = 2;
     // Set rm.
-    if (modrmsib.scale != SCALE_1)
+    if (modrmsib.scale != SCALE_1 || modrmsib.rm_reg == NOT_A_REGISTER)
         rm = 4;
-    else if (modrmsib.rm_reg == NOT_A_REGISTER)
-        rm = 5;
     else {
-        assert(is_gp3264_register(modrmsib.rm_reg) && (modrmsib.rm_reg != RSP || mod == 3));
+        assert(is_gp3264_register(modrmsib.rm_reg) && ((modrmsib.rm_reg != RSP && modrmsib.rm_reg != ESP && modrmsib.rm_reg != R12D) || mod == 3));
         rm = register_code(modrmsib.rm_reg);
     }
     // Set reg.
     reg = (modrmsib.reg != NOT_A_REGISTER ? register_code(modrmsib.reg) : 0);
+
+//    std::printf("MOD %x RM %x REG %x\n", mod, rm, reg);
+    // According to the x86 manuals, there's a weird gap in the licitly encodable instructions here:
+    assert(! (mod == 1 && (rm == 6 || rm == 7) && reg == 2));
 
     r.modrm = raw_modrm(mod, rm, reg);
 
@@ -143,6 +141,7 @@ static RawModrmSib raw_modrmsib(ModrmSib const &modrmsib)
         r.sib = 0;
     }
     else {
+//        std::printf("SIB !!!!\n");
         // SIB has the same structure as a modrm byte, so we can use raw_modrm again.
 
         // Set mod.
@@ -157,7 +156,7 @@ static RawModrmSib raw_modrmsib(ModrmSib const &modrmsib)
         if (modrmsib.base_reg == NOT_A_REGISTER)
             sib_rm = 4;
         else {
-            assert(is_gp3264_register(modrmsib.rm_reg) && modrmsib.rm_reg != RSP && modrmsib.rm_reg != R13D);
+            assert(is_gp3264_register(modrmsib.rm_reg) && modrmsib.rm_reg != RSP && modrmsib.rm_reg != ESP && modrmsib.rm_reg != R12D);
             sib_rm = register_code(modrmsib.rm_reg);
         }
         // Set reg (base).
@@ -220,7 +219,7 @@ ModrmSib mem_2op(Register reg, Register base, Register index, Scale scale, int32
 {
     return ModrmSib(/*rip*/       false,
                     /*rm_reg*/    index == NOT_A_REGISTER ? base : index,
-                    /*disp_size*/ short_displacement ? DISP_SIZE_8 : DISP_SIZE_32,
+                    /*disp_size*/ (short_displacement || displacement == 0) ? DISP_SIZE_8 : DISP_SIZE_32,
                     /*disp*/      displacement,
                     /*reg*/       reg,
                     /*base_reg*/  index == NOT_A_REGISTER ? NOT_A_REGISTER : base,
