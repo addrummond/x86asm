@@ -26,8 +26,8 @@ using namespace Vm;
 // When debugging, we want to check that register saving is working properly. Hence,
 // we use registers that need to be saved before using those that don't.
 #ifdef DEBUG
-const Asm::Register vm_regs_x86_regs[] = { Asm::RDI, Asm::RSI, Asm::R13D, Asm::R14D, Asm::R15D, Asm::RBX  };
-const bool vm_regs_x86_regs_to_save[] =  { true,     true,     false,     false,     false,     true };
+const Asm::Register vm_regs_x86_regs[] = { Asm::R11D, Asm::RDI, Asm::RSI, Asm::R12D, Asm::R13D, Asm::R14D, Asm::R15D, Asm::RBX  };
+const bool vm_regs_x86_regs_to_save[] =  { true,      true,     true,     false,     false,     false,     false,     true };
 #else
 //const Asm::Register vm_regs_x86_regs[] = { /*Asm::R11D, Asm::R12D,*/ Asm::R13D, Asm::R14D, Asm::R15D, Asm::RBX, Asm::RDI, Asm::RSI };
 //const bool vm_regs_x86_regs_to_save[] =  { /*false,     false,*/     false,     false,     false,     true,     true,     true };
@@ -501,7 +501,7 @@ static Asm::Register move_vmreg_ptr_to_x86reg(Asm::Assembler<WriterT> &a, Asm::R
 {
     using namespace Asm;
     if (vmreg <= NUM_VM_REGS_IN_X86_REGS)
-        return vm_regs_x86_regs[vmreg - 1];
+        return vm_regs_x86_regs[vmreg-1];
     a.mov_reg_rm64(mem_2op_short(x86reg, RBP, NOT_A_REGISTER/*index*/, SCALE_1, RegId_to_disp(vmreg)));
     return x86reg;
 }
@@ -510,6 +510,8 @@ template <class WriterT>
 static void move_vmreg_ptr_to_guaranteed_x86reg(Asm::Assembler<WriterT> &a, Asm::Register x86reg, RegId vmreg)
 {
     using namespace Asm;
+
+    assert(vmreg > 0);
     if (vmreg <= NUM_VM_REGS_IN_X86_REGS) {
         if (x86reg != vm_regs_x86_regs[vmreg-1])
             a.mov_reg_reg64(x86reg, vm_regs_x86_regs[vmreg-1]);
@@ -523,7 +525,8 @@ static int is_saved_before_c_funcall(Asm::Register reg)
     using namespace Asm;
 
     int saved_count = 0;
-    for (int i = 0; i < NUM_VM_REGS_IN_X86_REGS; ++i) {
+    int i = 0;
+    for (i = 0; i < NUM_VM_REGS_IN_X86_REGS; ++i) {
         if (reg == vm_regs_x86_regs[i]) {
             return vm_regs_x86_regs_to_save[i] ? saved_count : -1;
         }
@@ -548,15 +551,16 @@ static void move_vmreg_ptr_to_guaranteed_x86reg_following_save(MainLoopState con
         move_vmreg_ptr_to_guaranteed_x86reg(a, x86reg, vmreg);
     }
     else {
-        Register x86_reg_for_vmreg = vm_regs_x86_regs[vmreg];
+        Register x86_reg_for_vmreg = vm_regs_x86_regs[vmreg-1];
         int saved_count = is_saved_before_c_funcall(x86_reg_for_vmreg);
         if (saved_count == -1) {
             move_vmreg_ptr_to_guaranteed_x86reg(a, x86reg, vmreg);
         }
         else {
-            int offset = (saved_count * 8) - 8;
+            int offset = (saved_count * 8);
             assert(offset <= 127);
-            a.mov_reg_rm64(mem_2op_short(x86reg, RBP, NOT_A_REGISTER/*index*/, SCALE_1, offset));
+            a.mov_reg_reg64(RCX, RSP);
+            a.mov_reg_rm64(mem_2op_short(x86reg, RCX, NOT_A_REGISTER/*index*/, SCALE_1, offset));
         }
     }
 }
