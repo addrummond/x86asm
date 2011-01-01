@@ -856,7 +856,7 @@ static void set_bool(Asm::Assembler<WriterT> &a, bool &var, bool tf)
         bpa__.mov_rm64_reg(mem_2op(RSP, RCX)); \
         bpa__.ret(); \
         bpw__.get_exec_func()(); \
-    } while (0);
+    } while (0)
 
 static uint64_t inner_main_loop(MainLoopState &mls);
 template <class WriterT>
