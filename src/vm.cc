@@ -26,11 +26,11 @@ using namespace Vm;
 // When debugging, we want to check that register saving is working properly. Hence,
 // we use registers that need to be saved before using those that don't.
 #ifdef DEBUG
-const Asm::Register vm_regs_x86_regs[] = { Asm::RSI, Asm::RDI, Asm::R13D, Asm::R14D, Asm::R15D, Asm::RBX  };
+const Asm::Register vm_regs_x86_regs[] = { Asm::RDI, Asm::RSI, Asm::R13D, Asm::R14D, Asm::R15D, Asm::RBX  };
 const bool vm_regs_x86_regs_to_save[] =  { true,     true,     false,     false,     false,     true };
 #else
-//const Asm::Register vm_regs_x86_regs[] = { Asm::R11D, Asm::R12D, Asm::R13D, Asm::R14D, Asm::R15D, Asm::RBX, Asm::RDI, Asm::RSI };
-//const bool vm_regs_x86_regs_to_save[] =  { false,     false,     false,     false,     false,     true,     true,     true };
+//const Asm::Register vm_regs_x86_regs[] = { /*Asm::R11D, Asm::R12D,*/ Asm::R13D, Asm::R14D, Asm::R15D, Asm::RBX, Asm::RDI, Asm::RSI };
+//const bool vm_regs_x86_regs_to_save[] =  { /*false,     false,*/     false,     false,     false,     true,     true,     true };
 #endif
 const int NUM_VM_REGS_IN_X86_REGS = sizeof(vm_regs_x86_regs)/sizeof(Asm::Register);
 
@@ -324,6 +324,29 @@ bool Vm::parse_vm_asm(std::string const &input, std::vector<uint8_t> &instructio
     return true;
 }
 
+struct MainLoopState {
+    MainLoopState(Vm::VectorAssemblerBroker &ab_, std::vector<uint8_t> &instructions_)
+        : ab(ab_), instructions(instructions_) { }
+    
+    Vm::VectorAssemblerBroker &ab;
+    std::vector<uint8_t> &instructions;
+    std::size_t start;
+    std::vector<uint8_t>::const_iterator position_of_last_incrw;
+    std::size_t BLOB_SIZE;
+    uint64_t saved_registers[16];
+    bool registers_are_saved;
+    std::size_t current_num_vm_registers;
+    uint64_t initial_base_pointer_for_main_loop;
+    uint64_t initial_stack_pointer_for_main_loop;
+
+    Mem::MemState mem_state;
+
+#ifdef DEBUG
+    struct Asm::CountingVectorWriter *last_writer;
+    std::size_t last_asm_offset;
+#endif
+};
+
 ///////////
 Vm::VectorAssemblerBroker::Entry::Entry() { }
 Vm::VectorAssemblerBroker::Entry::Entry(Vm::VectorAssemblerBroker::Entry const &e)
@@ -455,6 +478,12 @@ static int8_t RegId_to_disp(RegId id)
     return (id-NUM_VM_REGS_IN_X86_REGS) * -8;
 }
 
+static bool vm_reg_is_in_x86_reg(RegId id)
+{
+    assert(id <= MAX_REG_ID);
+    return id <= NUM_VM_REGS_IN_X86_REGS;
+}
+
 template <class WriterT>
 static void move_x86reg_to_vmreg_ptr(Asm::Assembler<WriterT> &a, RegId vmreg, Asm::Register x86reg)
 {
@@ -478,7 +507,7 @@ static Asm::Register move_vmreg_ptr_to_x86reg(Asm::Assembler<WriterT> &a, Asm::R
 }
 
 template <class WriterT>
-static void move_vmreg_ptr_to_guaranteed_x86reg(Asm::Assembler<WriterT> &a, Asm::Register x86reg, RegId vmreg)
+static void move_vmreg_ptr_to_guaranteed_x86reg(Asm::Assembler<WriterT> &a, Asm::Register x86reg, RegId vmreg, unsigned extra_offset=0)
 {
     using namespace Asm;
     if (vmreg <= NUM_VM_REGS_IN_X86_REGS) {
@@ -486,7 +515,50 @@ static void move_vmreg_ptr_to_guaranteed_x86reg(Asm::Assembler<WriterT> &a, Asm:
             a.mov_reg_reg64(x86reg, vm_regs_x86_regs[vmreg-1]);
     }
     else
-        a.mov_reg_rm64(mem_2op_short(x86reg, RBP, NOT_A_REGISTER/*index*/, SCALE_1, RegId_to_disp(vmreg)));
+        a.mov_reg_rm64(mem_2op_short(x86reg, RBP, NOT_A_REGISTER/*index*/, SCALE_1, RegId_to_disp(vmreg) + extra_offset));
+}
+
+static int is_saved_before_c_funcall(Asm::Register reg)
+{
+    using namespace Asm;
+
+    int saved_count = 0;
+    for (int i = 0; i < sizeof(vm_regs_x86_regs) / sizeof(Register); ++i) {
+        if (reg == vm_regs_x86_regs[i]) {
+            return vm_regs_x86_regs_to_save[i] ? saved_count : -1;
+        }
+        if (vm_regs_x86_regs_to_save[i])
+            ++saved_count;
+    }
+    assert(false);
+}
+
+template <class WriterT>
+static void move_vmreg_ptr_to_guaranteed_x86reg_following_save(MainLoopState const &mls, Asm::Assembler<WriterT> &a, Asm::Register x86reg, RegId vmreg)
+{
+    using namespace Asm;
+
+    unsigned regs_saved = 0;
+    for (int i = 0; i < sizeof(vm_regs_x86_regs) / sizeof(Register) && i < mls.current_num_vm_registers; ++i) {
+        if (vm_regs_x86_regs_to_save[i])
+            ++regs_saved;
+    }
+
+    if (! vm_reg_is_in_x86_reg(vmreg)) {
+        move_vmreg_ptr_to_guaranteed_x86reg(a, x86reg, vmreg, regs_saved * 8);
+    }
+    else {
+        Register x86_reg_for_vmreg = vm_regs_x86_regs[vmreg];
+        int saved_count = is_saved_before_c_funcall(x86_reg_for_vmreg);
+        if (saved_count == -1) {
+            move_vmreg_ptr_to_guaranteed_x86reg(a, x86reg, vmreg, regs_saved * 8);
+        }
+        else {
+            int offset = (saved_count * 8) - 8;
+            assert(offset <= 127);
+            a.mov_reg_rm64(mem_2op_short(x86reg, RBP, NOT_A_REGISTER/*index*/, SCALE_1, offset));
+        }
+    }
 }
 
 static void *my_malloc(size_t bytes)
@@ -497,29 +569,6 @@ static void *my_malloc(size_t bytes)
 #endif
     return r;
 }
-
-struct MainLoopState {
-    MainLoopState(Vm::VectorAssemblerBroker &ab_, std::vector<uint8_t> &instructions_)
-        : ab(ab_), instructions(instructions_) { }
-    
-    Vm::VectorAssemblerBroker &ab;
-    std::vector<uint8_t> &instructions;
-    std::size_t start;
-    std::vector<uint8_t>::const_iterator position_of_last_incrw;
-    std::size_t BLOB_SIZE;
-    uint64_t saved_registers[16];
-    bool registers_are_saved;
-    std::size_t current_num_vm_registers;
-    uint64_t initial_base_pointer_for_main_loop;
-    uint64_t initial_stack_pointer_for_main_loop;
-
-    Mem::MemState mem_state;
-
-#ifdef DEBUG
-    struct Asm::CountingVectorWriter *last_writer;
-    std::size_t last_asm_offset;
-#endif
-};
 
 static void *call_alloc_tagged_mem(Mem::MemState &ms, std::size_t size, unsigned tag)
 { ms.alloc_tagged_mem(size, tag); }
@@ -736,10 +785,9 @@ static void emit_debug_printreg(MainLoopState const &mls, Asm::Assembler<WriterT
 {
     using namespace Asm;
 
-    a.mov_reg_imm32(EDI, static_cast<uint32_t>(r));
-    move_vmreg_ptr_to_guaranteed_x86reg(a, RSI, r);
-
     save_regs_before_c_funcall(mls, a);
+    a.mov_reg_imm32(EDI, static_cast<uint32_t>(r));
+    move_vmreg_ptr_to_guaranteed_x86reg_following_save(mls, a, RSI, r);
     a.mov_reg_imm64(RCX, PTR(print_vm_reg));
     a.mov_reg_imm64(RAX, 0);
     a.call_rm64(reg_1op(RCX));
