@@ -343,6 +343,7 @@ struct MainLoopState {
     std::size_t current_num_vm_registers;
     uint64_t initial_base_pointer_for_main_loop;
     uint64_t initial_stack_pointer_for_main_loop;
+    bool last_instruction_exited;
 
     Mem::MemState mem_state;
 
@@ -783,6 +784,54 @@ static void emit_ret(MainLoopState const &mls, Asm::Assembler<WriterT> &a)
     a.ret();
 }
 
+template <class WriterT>
+static void emit_jump(MainLoopState &mls, Asm::Assembler<WriterT> &a, WriterT &w, Opcode opcode, std::size_t bytecode_offset)
+{
+    using namespace Asm;
+
+    if (opcode == OP_CJMP) mls.last_instruction_exited = true;
+
+    typedef void (CountingVectorAssembler::*jmp_fptr)(Disp<int32_t> disp, BranchHint hint);
+    struct Pr { Opcode opcode; BranchHint hint; jmp_fptr fptr; };
+    static Pr const jmp_fptrs[] = {
+        { OP_CJMP, BRANCH_HINT_NONE, &CountingVectorAssembler::jmp_nr_rel32 },
+        { OP_CJE, BRANCH_HINT_NONE, &CountingVectorAssembler::je_nr_rel32 },
+        { OP_CJNE, BRANCH_HINT_NONE, &CountingVectorAssembler::jne_nr_rel32 }
+    };
+
+    // If this is a local jump, we can guarantee that the ASM code for the jump will be
+    // created/deleted at the same time as the ASM code for the target, so we can make the jump
+    // directly rather than going via the main JIT loop (much faster).
+    if (VectorAssemblerBroker::Entry const *je = mls.ab.known_to_be_local(&*(mls.instructions.begin() + mls.start), &*(mls.instructions.begin() + bytecode_offset))) {
+        // Check if it's in the same stack frame.
+        if (! (mls.instructions.begin() + bytecode_offset >= mls.position_of_last_incrw)) {
+            // TODO: Implement.
+            assert(false);
+        }
+        
+        // FAST(er)
+        uint64_t current_addr = w.get_start_addr() + w.size();
+        uint64_t target_addr = je->writer->get_start_addr(je->offset);
+        int32_t rel = (int32_t)(target_addr - current_addr);
+        
+        int j;
+        for (j = 0; j < sizeof(jmp_fptrs) / sizeof(Pr); ++j) {
+            if (jmp_fptrs[j].opcode == opcode) {
+                (a.*(jmp_fptrs[j].fptr))(mkdisp<int32_t>(rel, DISP_SUB_ISIZE), jmp_fptrs[j].hint);
+                break;
+            }
+        }
+        assert(j < sizeof(jmp_fptrs) / sizeof(Pr));
+    }
+    else {
+#ifdef DEBUG
+        std::printf("** SLOW JUMP (possible bug) **\n");
+#endif
+        // SLOW
+        call_main_loop_setting_start_to(mls, a, w, bytecode_offset);
+    }
+}
+
 static void print_vm_reg(RegId rid, uint64_t tagged_ptr)
 {
     uint64_t tag = tagged_ptr & 0x0000000000000003;
@@ -925,14 +974,14 @@ static uint64_t inner_main_loop(MainLoopState &mls)
     a->nop();
 #endif
 
-    bool last_instruction_exited = false;
+    mls.last_instruction_exited = false;
     std::vector<uint8_t>::const_iterator i;
     for (i = mls.instructions.begin() + mls.start;
          i != mls.instructions.end() && i - mls.instructions.begin() - mls.start < mls.BLOB_SIZE*4;
          i += 4) {
         assert(i + 3 < mls.instructions.end());
 
-        last_instruction_exited = false;
+        mls.last_instruction_exited = false;
 
         // If this bit of the code is jumped to, cache the location of the generated assembly.
         if (i[3] & FLAG_DESTINATION >> 24)
@@ -941,7 +990,7 @@ static uint64_t inner_main_loop(MainLoopState &mls)
         switch (*i) {
             case OP_NULL: assert(false);
             case OP_EXIT: {
-                last_instruction_exited = true;
+                mls.last_instruction_exited = true;
                 emit_exit(mls, *a, i[1]);
             } break;
             case OP_INCRW: {
@@ -984,49 +1033,7 @@ static uint64_t inner_main_loop(MainLoopState &mls)
             case OP_CJMP:
             case OP_CJE:
             case OP_CJNE: {
-                if (*i == OP_CJMP) last_instruction_exited = true;
-
-                std::size_t bytecode_offset = i[1] + ((std::size_t)i[2] << 8);
-
-                typedef void (CountingVectorAssembler::*jmp_fptr)(Disp<int32_t> disp, BranchHint hint);
-                struct Pr { Opcode opcode; BranchHint hint; jmp_fptr fptr; };
-                static Pr const jmp_fptrs[] = {
-                    { OP_CJMP, BRANCH_HINT_NONE, &CountingVectorAssembler::jmp_nr_rel32 },
-                    { OP_CJE, BRANCH_HINT_NONE, &CountingVectorAssembler::je_nr_rel32 },
-                    { OP_CJNE, BRANCH_HINT_NONE, &CountingVectorAssembler::jne_nr_rel32 }
-                };
-
-                // If this is a local jump, we can guarantee that the ASM code for the jump will be
-                // created/deleted at the same time as the ASM code for the target, so we can make the jump
-                // directly rather than going via the main JIT loop (much faster).
-                if (VectorAssemblerBroker::Entry const *je = mls.ab.known_to_be_local(&*(mls.instructions.begin() + mls.start), &*(mls.instructions.begin() + bytecode_offset))) {
-                    // Check if it's in the same stack frame.
-                    if (! (mls.instructions.begin() + bytecode_offset >= mls.position_of_last_incrw)) {
-                        // TODO: Implement.
-                        assert(false);
-                    }
-
-                    // FAST(er)
-                    uint64_t current_addr = w->get_start_addr() + w->size();
-                    uint64_t target_addr = je->writer->get_start_addr(je->offset);
-                    int32_t rel = (int32_t)(target_addr - current_addr);
-
-                    int j;
-                    for (j = 0; j < sizeof(jmp_fptrs) / sizeof(Pr); ++j) {
-                        if (jmp_fptrs[j].opcode == *i) {
-                            (a->*(jmp_fptrs[j].fptr))(mkdisp<int32_t>(rel, DISP_SUB_ISIZE), jmp_fptrs[j].hint);
-                            break;
-                        }
-                    }
-                    assert(j < sizeof(jmp_fptrs) / sizeof(Pr));
-                }
-                else {
-#ifdef DEBUG
-                    std::printf("** SLOW JUMP (possible bug) **\n");
-#endif
-                    // SLOW
-                    call_main_loop_setting_start_to(mls, *a, *w, bytecode_offset);
-                }
+                emit_jump(mls, *a, *w, (Opcode)*i, i[+1] + ((std::size_t)i[2] << 8));
             } break;
             default: assert(false);
         }
@@ -1035,7 +1042,7 @@ static uint64_t inner_main_loop(MainLoopState &mls)
 #endif
     }
 
-    if (! last_instruction_exited)
+    if (! mls.last_instruction_exited)
         call_main_loop_setting_start_to(mls, *a, *w, i - mls.instructions.begin());
 
 #ifdef DEBUG
