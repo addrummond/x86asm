@@ -523,7 +523,7 @@ static int is_saved_before_c_funcall(Asm::Register reg)
     using namespace Asm;
 
     int saved_count = 0;
-    for (int i = 0; i < sizeof(vm_regs_x86_regs) / sizeof(Register); ++i) {
+    for (int i = 0; i < NUM_VM_REGS_IN_X86_REGS; ++i) {
         if (reg == vm_regs_x86_regs[i]) {
             return vm_regs_x86_regs_to_save[i] ? saved_count : -1;
         }
@@ -539,7 +539,7 @@ static void move_vmreg_ptr_to_guaranteed_x86reg_following_save(MainLoopState con
     using namespace Asm;
 
     unsigned regs_saved = 0;
-    for (int i = 0; i < sizeof(vm_regs_x86_regs) / sizeof(Register) && i < mls.current_num_vm_registers; ++i) {
+    for (int i = 0; i < NUM_VM_REGS_IN_X86_REGS && i < mls.current_num_vm_registers; ++i) {
         if (vm_regs_x86_regs_to_save[i])
             ++regs_saved;
     }
@@ -723,7 +723,7 @@ template <class WriterT>
 static void save_regs_before_c_funcall(MainLoopState const &mls, Asm::Assembler<WriterT> &a)
 {
     using namespace Asm;
-    for (int i = 0; i < sizeof(vm_regs_x86_regs) / sizeof(Register) && i < mls.current_num_vm_registers; ++i) {
+    for (int i = 0; i < NUM_VM_REGS_IN_X86_REGS && i < mls.current_num_vm_registers; ++i) {
 //    for (int i = 0; i < sizeof(vm_regs_x86_regs) / sizeof(Register); ++i) {
         if (vm_regs_x86_regs_to_save[i]) {
 //        if (true) {
@@ -736,7 +736,7 @@ template <class WriterT>
 static void restore_regs_after_c_funcall(MainLoopState const &mls, Asm::Assembler<WriterT> &a)
 {
     using namespace Asm;
-    for (int i = std::min(static_cast<int>(mls.current_num_vm_registers), static_cast<int>((sizeof(vm_regs_x86_regs) / sizeof(Register)))) - 1; i >= 0; --i) {
+    for (int i = std::min(static_cast<int>(mls.current_num_vm_registers), static_cast<int>(NUM_VM_REGS_IN_X86_REGS)) - 1; i >= 0; --i) {
 //    for (int i = (sizeof(vm_regs_x86_regs) / sizeof(Register)) - 1; i >= 0; --i) {
         if (vm_regs_x86_regs_to_save[i]) {
 //        if (true) {
