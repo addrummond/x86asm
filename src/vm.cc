@@ -475,7 +475,7 @@ Vm::VectorAssemblerBroker::Entry const *Vm::VectorAssemblerBroker::known_to_be_l
 static int8_t RegId_to_disp(RegId id)
 {
     assert(id <= MAX_REG_ID && id > NUM_VM_REGS_IN_X86_REGS);
-    return (id-NUM_VM_REGS_IN_X86_REGS) * -8;
+    return (id-NUM_VM_REGS_IN_X86_REGS-1) * 8;
 }
 
 static bool vm_reg_is_in_x86_reg(RegId id)
@@ -507,7 +507,7 @@ static Asm::Register move_vmreg_ptr_to_x86reg(Asm::Assembler<WriterT> &a, Asm::R
 }
 
 template <class WriterT>
-static void move_vmreg_ptr_to_guaranteed_x86reg(Asm::Assembler<WriterT> &a, Asm::Register x86reg, RegId vmreg, unsigned extra_offset=0)
+static void move_vmreg_ptr_to_guaranteed_x86reg(Asm::Assembler<WriterT> &a, Asm::Register x86reg, RegId vmreg)
 {
     using namespace Asm;
     if (vmreg <= NUM_VM_REGS_IN_X86_REGS) {
@@ -515,7 +515,7 @@ static void move_vmreg_ptr_to_guaranteed_x86reg(Asm::Assembler<WriterT> &a, Asm:
             a.mov_reg_reg64(x86reg, vm_regs_x86_regs[vmreg-1]);
     }
     else
-        a.mov_reg_rm64(mem_2op_short(x86reg, RBP, NOT_A_REGISTER/*index*/, SCALE_1, RegId_to_disp(vmreg) + extra_offset));
+        a.mov_reg_rm64(mem_2op_short(x86reg, RBP, NOT_A_REGISTER/*index*/, SCALE_1, RegId_to_disp(vmreg)));
 }
 
 static int is_saved_before_c_funcall(Asm::Register reg)
@@ -545,13 +545,13 @@ static void move_vmreg_ptr_to_guaranteed_x86reg_following_save(MainLoopState con
     }
 
     if (! vm_reg_is_in_x86_reg(vmreg)) {
-        move_vmreg_ptr_to_guaranteed_x86reg(a, x86reg, vmreg, regs_saved * 8);
+        move_vmreg_ptr_to_guaranteed_x86reg(a, x86reg, vmreg);
     }
     else {
         Register x86_reg_for_vmreg = vm_regs_x86_regs[vmreg];
         int saved_count = is_saved_before_c_funcall(x86_reg_for_vmreg);
         if (saved_count == -1) {
-            move_vmreg_ptr_to_guaranteed_x86reg(a, x86reg, vmreg, regs_saved * 8);
+            move_vmreg_ptr_to_guaranteed_x86reg(a, x86reg, vmreg);
         }
         else {
             int offset = (saved_count * 8) - 8;
