@@ -590,7 +590,7 @@ static void *call_alloc_tagged_mem(Mem::MemState &ms, std::size_t size, unsigned
 // is how the Mem::MemState::Allocation structure is returned according
 // to the x86-64 ABI.)
 template <class WriterT>
-static void emit_malloc_constsize(MainLoopState const &mls, Asm::Assembler<WriterT> &a, std::size_t size, RegId ptr_dest, unsigned tag)
+static void emit_alloc_tagged_mem(MainLoopState const &mls, Asm::Assembler<WriterT> &a, std::size_t size, RegId ptr_dest, unsigned tag)
 {
     using namespace Asm;
 
@@ -622,7 +622,7 @@ template <class WriterT>
 static void emit_ldi(MainLoopState const &mls, Asm::Assembler<WriterT> &a, RegId ptr_dest, uint64_t val)
 {
     using namespace Asm;
-    emit_malloc_constsize(mls, a, 8, ptr_dest, TAG_INT); // Leaves untagged address in RAX.
+    emit_alloc_tagged_mem(mls, a, 8, ptr_dest, TAG_INT); // Leaves untagged address in RAX.
     a.mov_reg_imm64(RCX, val);
     a.mov_rm64_reg(mem_2op(RCX, RAX));
 }
