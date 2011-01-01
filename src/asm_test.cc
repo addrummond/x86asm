@@ -371,6 +371,24 @@ after:
     );
 }
 
+//
+// Test that encoding of an add instruction is correct. (This is a bit random -- it
+// was used while fixing a particular bug, but is still a good test to run.)
+//
+void test9()
+{
+    VectorWriter w;
+    VectorAssembler a(w);
+
+    a.mov_reg_rm64(mem_2op(RDX, R13D));
+    w.debug_print();
+    std::string hex;
+    w.canonical_hex(hex);
+    std::printf("TEST 9\n\n");
+    assert(hex == "49 8b 55 00");
+    std::printf("* OK\n\n");
+}
+
 int main()
 {
     test1();
@@ -381,6 +399,7 @@ int main()
     test6();
     test7();
     test8();
+    test9();
 
     return 0;
 }
