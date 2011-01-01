@@ -559,7 +559,10 @@ static void move_vmreg_ptr_to_guaranteed_x86reg_following_save(MainLoopState con
         else {
             int offset = (saved_count * 8);
             assert(offset <= 127);
-            a.mov_reg_reg64(RCX, RSP);
+            a.mov_reg_reg64(RCX, RSP); // x86 instruction encoding quirk -- can't specify memory
+                                       // location relative to RSP. We don't want to move RSP
+                                       // into RBP as usual, because RBP is still holding our
+                                       // "real" base pointer.
             a.mov_reg_rm64(mem_2op_short(x86reg, RCX, NOT_A_REGISTER/*index*/, SCALE_1, offset));
         }
     }
