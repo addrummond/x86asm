@@ -86,6 +86,11 @@ static bool requires_sib(ModrmSib const &modrmsib)
     return !(modrmsib.disp_size == DISP_SIZE_NONE || modrmsib.scale == SCALE_1 || modrmsib.rm_reg == NOT_A_REGISTER);
 }
 
+bool Asm::reg_is_forbidden_in_rm(Register reg)
+{
+    return reg == ESP || reg == RSP || reg == R12D;
+}
+
 struct RawModrmSib {
     uint8_t modrm;
     uint8_t sib; // Set to 0 if none, since 0 is not a valid SIB.
@@ -124,7 +129,7 @@ static RawModrmSib raw_modrmsib(ModrmSib const &modrmsib)
     if (modrmsib.scale != SCALE_1 || modrmsib.rm_reg == NOT_A_REGISTER)
         rm = 4;
     else {
-        assert(is_gp3264_register(modrmsib.rm_reg) && ((modrmsib.rm_reg != RSP && modrmsib.rm_reg != ESP && modrmsib.rm_reg != R12D) || mod == 3));
+        assert(is_gp3264_register(modrmsib.rm_reg) && ((! reg_is_forbidden_in_rm(modrmsib.rm_reg) || mod == 3)));
         rm = register_code(modrmsib.rm_reg);
     }
     // Set reg.
@@ -156,7 +161,7 @@ static RawModrmSib raw_modrmsib(ModrmSib const &modrmsib)
         if (modrmsib.base_reg == NOT_A_REGISTER)
             sib_rm = 4;
         else {
-            assert(is_gp3264_register(modrmsib.rm_reg) && modrmsib.rm_reg != RSP && modrmsib.rm_reg != ESP && modrmsib.rm_reg != R12D);
+            assert(is_gp3264_register(modrmsib.rm_reg) && (! reg_is_forbidden_in_rm(modrmsib.rm_reg)));
             sib_rm = register_code(modrmsib.rm_reg);
         }
         // Set reg (base).

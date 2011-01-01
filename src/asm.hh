@@ -114,6 +114,8 @@ ModrmSib reg_1op(Register rm);
 ModrmSib rip_1op(Register reg, int32_t offset=0);
 ModrmSib rip_2op(Register reg2, Register reg1, int32_t offset=0);
 
+bool reg_is_forbidden_in_rm(Register reg);
+
 enum Rex {
     REX_PREFIX = 0x40,
     REX_W      = 0x08,
