@@ -26,11 +26,11 @@ using namespace Vm;
 // When debugging, we want to check that register saving is working properly. Hence,
 // we use registers that need to be saved before using those that don't.
 #ifdef DEBUG
-const Asm::Register vm_regs_x86_regs[] = { Asm::R11D, Asm::RDI, Asm::RSI, Asm::R12D, Asm::R13D, Asm::R14D, Asm::R15D, Asm::RBX  };
-const bool vm_regs_x86_regs_to_save[] =  { true,      true,     true,     false,     false,     false,     false,     true };
+const Asm::Register vm_regs_x86_regs[] = { Asm::R11D, Asm::RDI, Asm::RSI, /*Asm::R12D,*/ Asm::R13D, Asm::R14D, Asm::R15D, Asm::RBX  };
+const bool vm_regs_x86_regs_to_save[] =  { true,      true,     true,     /*false,*/     false,     false,     false,     true };
 #else
-//const Asm::Register vm_regs_x86_regs[] = { /*Asm::R11D, Asm::R12D,*/ Asm::R13D, Asm::R14D, Asm::R15D, Asm::RBX, Asm::RDI, Asm::RSI };
-//const bool vm_regs_x86_regs_to_save[] =  { /*false,     false,*/     false,     false,     false,     true,     true,     true };
+//const Asm::Register vm_regs_x86_regs[] = { /*Asm::R12D,*/ Asm::R13D, Asm::R14D, Asm::R15D, Asm::RBX, Asm::RDI, Asm::RSI, Asm::R11D };
+//const bool vm_regs_x86_regs_to_save[] =  { /*false,*/     false,     false,     false,     true,     true,     true,     true };
 #endif
 const int NUM_VM_REGS_IN_X86_REGS = sizeof(vm_regs_x86_regs)/sizeof(Asm::Register);
 
