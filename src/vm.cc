@@ -601,8 +601,8 @@ static void emit_incrw(Asm::Assembler<WriterT> &a, RegId num_regs)
     a.call_rel32(mkdisp<int32_t>(0, DISP_ADD_ISIZE));
     a.push_rm64(reg_1op(RBP));
     a.mov_rm64_reg(reg_2op(RSP, RBP));
-    if (num_regs > 8)
-        a.sub_rm64_imm8(reg_1op(RBP), (num_regs - 8) * 8);
+    if (num_regs > NUM_VM_REGS_IN_X86_REGS)
+        a.sub_rm64_imm8(reg_1op(RBP), (num_regs - NUM_VM_REGS_IN_X86_REGS) * 8);
 }
 
 template <class WriterT>
