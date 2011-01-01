@@ -61,7 +61,7 @@ void test2()
         " EXIT 1"
         ;
 
-    uint64_t rval = test_code(code, 2 /*small BLOB_SIZE to maximize chance of triggering bugs*/);
+    uint64_t rval = test_code(code, 20 /*small BLOB_SIZE to maximize chance of triggering bugs*/);
     assert(rval != 0);
     uint64_t rvali = *((uint64_t*)rval);
     std::printf("TEST2: rval=%lli\n", rvali);

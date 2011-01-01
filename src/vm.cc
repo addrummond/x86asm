@@ -16,21 +16,26 @@
 //
 // Register scheme.
 //
-// * GP registers are volatile scratch registers.
-// * R10-R15 hold the first 8 registers.
+// * Those GP registers that AREN'T used to pass arguments according to the x86-64 ABI are
+//   are used as volatile scratch registers.
+// * All other registers, including R8-R15, are used to hold VM registers, with the exception
+//   of R12. R12 is not used because the x86-instruction encoding scheme treats it like RSP,
+//   which cannot be used as the base register for a memory access. Hence, using it to hold
+//   VM registers would be a pain, and unlikely to yield much performance increase, since
+//   the value of RSP would first have to be moved to another register before the contents of
+//   the VM register could be accessed.
 //
 
 using namespace Vm;
 
-// TODO: Figure out why using R11D and R12D causes problems.
 // When debugging, we want to check that register saving is working properly. Hence,
 // we use registers that need to be saved before using those that don't.
 #ifdef DEBUG
-const Asm::Register vm_regs_x86_regs[] = { Asm::R11D, Asm::RDI, Asm::RSI, /*Asm::R12D,*/ Asm::R13D, Asm::R14D, Asm::R15D, Asm::RBX  };
-const bool vm_regs_x86_regs_to_save[] =  { true,      true,     true,     /*false,*/     false,     false,     false,     true };
+const Asm::Register vm_regs_x86_regs[] = { Asm::R8D, Asm::R9D, Asm::R10D, Asm::R11D, Asm::RDI, Asm::RSI, /*Asm::R12D,*/ Asm::R13D, Asm::R14D, Asm::R15D, Asm::RBX  };
+const bool vm_regs_x86_regs_to_save[] =  { true,     true,     true,      true,      true,     true,     /*false,*/     false,     false,     false,     true };
 #else
-//const Asm::Register vm_regs_x86_regs[] = { /*Asm::R12D,*/ Asm::R13D, Asm::R14D, Asm::R15D, Asm::RBX, Asm::RDI, Asm::RSI, Asm::R11D };
-//const bool vm_regs_x86_regs_to_save[] =  { /*false,*/     false,     false,     false,     true,     true,     true,     true };
+//const Asm::Register vm_regs_x86_regs[] = { /*Asm::R12D,*/ Asm::R13D, Asm::R14D, Asm::R15D, Asm::R8D, Asm::R9D, Asm::R10D, Asm::R11D, Asm::RBX, Asm::RDI, Asm::RSI, };
+//const bool vm_regs_x86_regs_to_save[] =  { /*false,*/     false,     false,     false,     true,     true,     true,      true,      true,     true,     true,     };
 #endif
 const int NUM_VM_REGS_IN_X86_REGS = sizeof(vm_regs_x86_regs)/sizeof(Asm::Register);
 
@@ -557,7 +562,8 @@ static void move_vmreg_ptr_to_guaranteed_x86reg_following_save(MainLoopState con
             move_vmreg_ptr_to_guaranteed_x86reg(a, x86reg, vmreg);
         }
         else {
-            int offset = (saved_count * 8);
+            assert(regs_saved - saved_count >= 0);
+            int offset = ((regs_saved - saved_count - 1) * 8);
             assert(offset <= 127);
             a.mov_reg_reg64(RCX, RSP); // x86 instruction encoding quirk -- can't specify memory
                                        // location relative to RSP. We don't want to move RSP
