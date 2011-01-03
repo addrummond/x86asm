@@ -204,6 +204,18 @@ bool Asm::ModrmSib::gp_registers_only() const
            (reg == NOT_A_REGISTER || (reg >= EAX && reg <= R15) || (reg >= AL && reg <= BH));
 }
 
+bool Asm::ModrmSib::mm_registers_only() const
+{
+    return (rm_reg == NOT_A_REGISTER || (rm_reg >= MM0 && rm_reg <= MM7)) &&
+           (reg == NOT_A_REGISTER || (reg >= MM0 && reg <= MM7));
+}
+
+bool Asm::ModrmSib::xmm_registers_only() const
+{
+    return (rm_reg == NOT_A_REGISTER || (rm_reg >= XMM0 && rm_reg <= XMM15)) &&
+           (reg == NOT_A_REGISTER || (reg >= XMM0 && reg <= XMM15));
+}
+
 bool Asm::ModrmSib::all_register_operands_have_size(Size size) const
 {
     return (reg == NOT_A_REGISTER || register_byte_size(reg) == size) &&
@@ -262,6 +274,10 @@ static uint8_t reg_modrm(Register reg) // Single register.
     return 0xC0 + register_code(reg);
 }
 
+static bool is_extended_reg(Register reg)
+{
+    return (reg >= R8 && reg <= R15) || (reg >= XMM8 && reg <= R15);
+}
 static uint8_t compute_rex(ModrmSib const &modrmsib, Size size, bool allow_rex_w=true) // Returns 0 if no REX.
 {
     uint8_t rex = (size == SIZE_64 && allow_rex_w ? REX_W : 0);
@@ -270,16 +286,16 @@ static uint8_t compute_rex(ModrmSib const &modrmsib, Size size, bool allow_rex_w
 
     if (! requires_sib(modrmsib)) {//modrmsib.disp_size == DISP_SIZE_NONE || modrmsib.scale == SCALE_1) {
         // No SIB.
-        if (modrmsib.rm_reg >= R8 && modrmsib.rm_reg <= R15)
+        if (is_extended_reg(modrmsib.rm_reg))
             rex |= REX_B;
-        if (modrmsib.reg >= R8 && modrmsib.reg <= R15)
+        if (is_extended_reg(modrmsib.reg))
             rex |= REX_R;
     }
     else {
         // Yes SIB.
-        if (modrmsib.rm_reg >= R8 && modrmsib.rm_reg <= R15)
+        if (is_extended_reg(modrmsib.rm_reg))
             rex |= REX_X;
-        if (modrmsib.reg >= R8 && modrmsib.reg <= R15)
+        if (is_extended_reg(modrmsib.reg))
             rex |= REX_R;
     }
 
@@ -955,6 +971,17 @@ static void mov_reg_immX_(Assembler<WriterT> &a, WriterT &w, Register reg, ImmT 
 INST(mov_reg_imm32, uint32_t, SIZE_32)
 INST(mov_reg_imm64, uint64_t, SIZE_64)
 #undef INST
+
+//
+// SSE(2) MOV* instructions.
+//
+template <class WriterT>
+void Asm::Assembler<WriterT>::movdqa(ModrmSib const &modrmsib)
+{
+    assert(modrmsib.xmm_registers_only());
+    AZ("\x0F\xE7");
+    
+}
 
 //
 // NOP

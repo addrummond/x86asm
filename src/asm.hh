@@ -88,7 +88,12 @@ struct ModrmSib {
     bool gp3264_registers_only() const;
     // Return true if all register operands are 8-bit GP registers.
     bool gp8_registers_only() const;
+    // Return true if all register operands are GP registers.
     bool gp_registers_only() const;
+    // Return true if all register operands are MM registers.
+    bool mm_registers_only() const;
+    // Return true iff all register operands are XMM registers.
+    bool xmm_registers_only() const;
     // Returns true if there is no additional reg operand.
     bool has_reg_operand() const;
     // Checks that all register operands in a ModRM byte have a given (byte) size.
@@ -427,6 +432,9 @@ public:
     void mov_reg_reg8(Register dest, Register src) { mov_reg_rm8(reg_2op(dest, src)); }
     void mov_reg_reg32(Register dest, Register src) { mov_reg_rm32(reg_2op(dest, src)); }
     void mov_reg_reg64(Register dest, Register src) { mov_reg_rm64(reg_2op(dest, src)); }
+
+    // SSE(2) MOV* intructions.
+    void movdqa(ModrmSib const &modrmsib);
 
     // MUL
     void mul_edx_eax_rm32(ModrmSib const &modrmsib);
