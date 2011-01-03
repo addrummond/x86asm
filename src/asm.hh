@@ -36,6 +36,7 @@ enum Size {
     SIZE_32=4,
     SIZE_64=8,
     SIZE_80=10,
+    SIZE_128=16
 };
 
 enum DispSize {

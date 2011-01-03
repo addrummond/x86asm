@@ -274,7 +274,7 @@ static uint8_t reg_modrm(Register reg) // Single register.
     return 0xC0 + register_code(reg);
 }
 
-static bool is_extended_reg(Register reg)
+static bool is_extended_reg(Register reg) // These need REX_B/REX_R
 {
     return (reg >= R8 && reg <= R15) || (reg >= XMM8 && reg <= R15);
 }
@@ -980,7 +980,8 @@ void Asm::Assembler<WriterT>::movdqa(ModrmSib const &modrmsib)
 {
     assert(modrmsib.xmm_registers_only());
     AZ("\x0F\xE7");
-    
+    ABIFNZ(compute_rex(modrmsib, SIZE_128, /*allow_rex_w=*/false));
+    write_modrmsib_disp(w, modrmsib);
 }
 
 //
