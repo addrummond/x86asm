@@ -10,19 +10,13 @@
 using namespace Asm;
 
 // Register codes.
-// {REX, Reg Field}.
-#define R REX_PREFIX
-#define W (REX_PREFIX | REX_W)
-#define B (REX_PREFIX | REX_B | REX_W)
 namespace Asm {
-static const uint8_t register_codes[][2] = {
-    {0,0}, {0,1}, {0,2}, {0,3}, {0,4}, {0,5}, {0,6}, {0,7}, // EAX-EDI
-    {W,0}, {W,1}, {W,2}, {W,3}, {W,4}, {W,5}, {W,6}, {W,7}, // RAX-RDI
-    {B,0}, {B,1}, {B,2}, {B,3}, {B,4}, {B,5}, {B,6}, {B,7}, // R8D-R15D
-    {0,0}, {0,1}, {0,2}, {0,3}, {0,4}, {0,5}, {0,6}, {0,7}, // MM0-MM7
-    // TODO: Check if REX_W is needed for the following:
-    {0,0}, {0,1}, {0,2}, {0,3}, {0,4}, {0,5}, {0,6}, {0,7}, // XMM0-XMM7
-    {0,0}, {0,1}, {0,2}, {0,3}, {0,4}, {0,5}, {0,6}, {0,7}  // AL-BH
+static const uint8_t register_codes[] = {
+    0,1,2,3,4,5,6,7, // EAX-EDI
+    0,1,2,3,4,5,6,7, // R8D-R15D
+    0,1,2,3,4,5,6,7, // MM0-MM7
+    0,1,2,3,4,5,6,7, // XMM0-XMM7
+    0,1,2,3,4,5,6,7  // XMM8-XMM15
 };
 static char const *register_names[] = {
     "EAX", "ECX", "EDX", "EBX", "ESP", "EBP", "ESI", "EDI",
@@ -30,17 +24,14 @@ static char const *register_names[] = {
     "R8D", "R9D", "R10D", "R11D", "R12D", "R13D", "R14D", "R15D",
     "MM0", "MM1", "MM2", "MM4", "MM5", "MM6", "MM7",
     "XMM0", "XMM1", "XMM2", "XMM3", "XMM4", "XMM5", "XMM6", "XMM7",
+    "XMM8", "XMM9", "XMM10", "XMM11", "XMM12", "XMM13", "XMM14", "XMM15",
     "AL", "CL", "DL", "BL", "AH", "CH", "DH", "BH"
     "FS", "GS",
     "NOT_A_REGISTER"
 };
 }
 char const *Asm::register_name(Register reg) { return register_names[reg]; }
-uint8_t Asm::register_rex(Register reg) { assert(reg < FS); return register_codes[reg][0]; }
-uint8_t Asm::register_code(Register reg) { assert(reg < FS); return register_codes[reg][1]; }
-#undef W
-#undef R
-#undef B
+uint8_t Asm::register_code(Register reg) { assert(reg < FS); return register_codes[reg]; }
 
 // Registers which can be specified using +r* (in 64-bit mode).
 bool has_additive_code_64(Register r)
@@ -54,12 +45,13 @@ bool has_additive_code_32(Register r)
 
 namespace Asm {
 static unsigned register_byte_sizes[] = {
-    4, 4, 4, 4, 4, 4, 4, 4, // EAX-EDI
-    8, 8, 8, 8, 8, 8, 8, 8, // RAX-RDI
-    8, 8, 8, 8, 8, 8, 8, 8, // R8D-R15D
-    8, 8, 8, 8, 8, 8, 8, 8, // MM0-MM7
-    8, 8, 8, 8, 8, 8, 8, 8, // XMM0-XMM7
-    1, 1, 1, 1, 1, 1, 1, 1  // AL-BH
+    4, 4, 4, 4, 4, 4, 4, 4,         // EAX-EDI
+    8, 8, 8, 8, 8, 8, 8, 8,         // RAX-RDI
+    8, 8, 8, 8, 8, 8, 8, 8,         // R8D-R15D
+    10, 10, 10, 10, 10, 10, 10, 10, // MM0-MM7
+    8, 8, 8, 8, 8, 8, 8, 8,         // XMM0-XMM7
+    8, 8, 8, 8, 8, 8, 8, 8,         // XMM8-XMM15
+    1, 1, 1, 1, 1, 1, 1, 1          // AL-BH
 };
 }
 unsigned Asm::register_byte_size(Register reg) { assert(reg <= BH); return register_byte_sizes[reg]; }

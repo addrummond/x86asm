@@ -15,6 +15,7 @@ enum Register {
     R8D, R9D, R10D, R11D, R12D, R13D, R14D, R15D,
     MM0, MM1, MM2, MM3, MM4, MM5, MM6, MM7,
     XMM0, XMM1, XMM2, XMM3, XMM4, XMM5, XMM6, XMM7,
+    XMM8, XMM9, XMM10, XMM11, XMM12, XMM13, XMM14, XMM15,
 
     // For the most part, the assembler doesn't support fiddling around
     // with 8-bit registers, but there are one or two exceptions
