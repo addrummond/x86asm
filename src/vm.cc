@@ -31,10 +31,10 @@ using namespace Vm;
 // When debugging, we want to check that register saving is working properly. Hence,
 // we use registers that need to be saved before using those that don't.
 #ifdef DEBUG
-const Asm::Register vm_regs_x86_regs[] = { Asm::R8D, Asm::R9D, Asm::R10D, Asm::R11D, Asm::RDI, Asm::RSI, /*Asm::R12D,*/ Asm::R13D, Asm::R14D, Asm::R15D, Asm::RBX  };
+const Asm::Register vm_regs_x86_regs[] = { Asm::R8D, Asm::R9D, Asm::R10D, Asm::R11D, Asm::RDI, Asm::RSI, /*Asm::R12D,*/ Asm::R13D, Asm::R14D, Asm::R15D, Asm::RCX  };
 const bool vm_regs_x86_regs_to_save[] =  { true,     true,     true,      true,      true,     true,     /*false,*/     false,     false,     false,     true };
 #else
-//const Asm::Register vm_regs_x86_regs[] = { /*Asm::R12D,*/ Asm::R13D, Asm::R14D, Asm::R15D, Asm::R8D, Asm::R9D, Asm::R10D, Asm::R11D, Asm::RBX, Asm::RDI, Asm::RSI, };
+//const Asm::Register vm_regs_x86_regs[] = { /*Asm::R12D,*/ Asm::R13D, Asm::R14D, Asm::R15D, Asm::R8D, Asm::R9D, Asm::R10D, Asm::R11D, Asm::RCX, Asm::RDI, Asm::RSI, };
 //const bool vm_regs_x86_regs_to_save[] =  { /*false,*/     false,     false,     false,     true,     true,     true,      true,      true,     true,     true,     };
 #endif
 const int NUM_VM_REGS_IN_X86_REGS = sizeof(vm_regs_x86_regs)/sizeof(Asm::Register);
@@ -572,11 +572,11 @@ static void move_vmreg_ptr_to_guaranteed_x86reg_following_save(MainLoopState con
             assert(regs_saved - saved_count >= 0);
             int offset = ((regs_saved - saved_count - 1) * 8);
             assert(offset <= 127);
-            a.mov_reg_reg64(RCX, RSP); // x86 instruction encoding quirk -- can't specify memory
+            a.mov_reg_reg64(RBX, RSP); // x86 instruction encoding quirk -- can't specify memory
                                        // location relative to RSP. We don't want to move RSP
                                        // into RBP as usual, because RBP is still holding our
                                        // "real" base pointer.
-            a.mov_reg_rm64(mem_2op_short(x86reg, RCX, NOT_A_REGISTER/*index*/, SCALE_1, offset));
+            a.mov_reg_rm64(mem_2op_short(x86reg, RBX, NOT_A_REGISTER/*index*/, SCALE_1, offset));
         }
     }
 }
@@ -631,8 +631,8 @@ static void emit_ldi(MainLoopState const &mls, Asm::Assembler<WriterT> &a, RegId
 {
     using namespace Asm;
     emit_alloc_tagged_mem(mls, a, 8, ptr_dest, TAG_INT, 0); // Leaves untagged address in RAX.
-    a.mov_reg_imm64(RCX, val);
-    a.mov_rm64_reg(mem_2op(RCX, RAX));
+    a.mov_reg_imm64(RBX, val);
+    a.mov_rm64_reg(mem_2op(RBX, RAX));
 }
 
 template <class WriterT>
@@ -640,7 +640,7 @@ static void emit_cmp(Asm::Assembler<WriterT> &a, RegId op1, RegId op2)
 {
     using namespace Asm;
     Register r1 = move_vmreg_ptr_to_x86reg(a, RDX, op1);
-    Register r2 = move_vmreg_ptr_to_x86reg(a, RCX, op2);
+    Register r2 = move_vmreg_ptr_to_x86reg(a, RBX, op2);
     a.mov_reg_rm64(mem_2op(RAX, r2));
     a.cmp_rm64_reg(mem_2op(RAX, r1));
 }
@@ -650,7 +650,7 @@ static void emit_iadd(Asm::Assembler<WriterT> &a, RegId r_dest, RegId r_src)
 {
     using namespace Asm;
     Register r1 = move_vmreg_ptr_to_x86reg(a, RDX, r_dest);
-    Register r2 = move_vmreg_ptr_to_x86reg(a, RCX, r_src);
+    Register r2 = move_vmreg_ptr_to_x86reg(a, RBX, r_src);
     a.mov_reg_rm64(mem_2op(RAX, r1));
     a.add_reg_rm64(mem_2op(RAX, r2));
     a.mov_rm64_reg(mem_2op(RAX, r1));
@@ -667,10 +667,10 @@ static void emit_exit(MainLoopState const &mls, Asm::Assembler<WriterT> &a, RegI
         a.mov_reg_imm64(RAX, 0);
 
     // Restore RBP and RSP.
-    a.mov_reg_imm64(RCX, PTR(&(mls.initial_base_pointer_for_main_loop)));
-    a.mov_reg_rm64(mem_2op(RBP, RCX));
-    a.mov_reg_imm64(RCX, PTR(&(mls.initial_stack_pointer_for_main_loop)));
-    a.mov_reg_rm64(mem_2op(RSP, RCX));
+    a.mov_reg_imm64(RBX, PTR(&(mls.initial_base_pointer_for_main_loop)));
+    a.mov_reg_rm64(mem_2op(RBP, RBX));
+    a.mov_reg_imm64(RBX, PTR(&(mls.initial_stack_pointer_for_main_loop)));
+    a.mov_reg_rm64(mem_2op(RSP, RBX));
 
     a.leave(); // Now that we've reset ESP/EBP, calling leave/ret
     a.ret();   // will return from main_loop_.
@@ -774,12 +774,12 @@ static void emit_call(MainLoopState const &mls, Asm::Assembler<WriterT> &a, RegI
 
     assert(num_args < MAX_VM_REGS);
 
-    move_vmreg_ptr_to_x86reg(a, RCX, r);
+    move_vmreg_ptr_to_x86reg(a, RBX, r);
     for (int i = 0; i < NUM_VM_REGS_IN_X86_REGS; ++i) {
         a.push_rm64(reg_1op(vm_regs_x86_regs[i]));
     }
     a.mov_reg_imm64(RDI, num_args);
-    a.call_rm64(reg_1op(RCX));
+    a.call_rm64(reg_1op(RBX));
     for (int i = NUM_VM_REGS_IN_X86_REGS; i >=0; --i) {
         a.pop_rm64(reg_1op(vm_regs_x86_regs[i]));
     }
@@ -885,9 +885,9 @@ static void emit_debug_printreg(MainLoopState const &mls, Asm::Assembler<WriterT
     save_regs_before_c_funcall(mls, a);
     a.mov_reg_imm32(EDI, static_cast<uint32_t>(r));
     move_vmreg_ptr_to_guaranteed_x86reg_following_save(mls, a, RSI, r);
-    a.mov_reg_imm64(RCX, PTR(print_vm_reg));
+    a.mov_reg_imm64(RBX, PTR(print_vm_reg));
     a.mov_reg_imm64(RAX, 0);
-    a.call_rm64(reg_1op(RCX));
+    a.call_rm64(reg_1op(RBX));
     restore_regs_after_c_funcall(mls, a);
 }
 
@@ -897,9 +897,9 @@ static void emit_debug_sayhi(MainLoopState const &mls, Asm::Assembler<WriterT> &
 {
     using namespace Asm;
 
-    a.mov_reg_imm64(RCX, PTR(sayhi));
+    a.mov_reg_imm64(RBX, PTR(sayhi));
     save_regs_before_c_funcall(mls, a);
-    a.call_rm64(reg_1op(RCX));
+    a.call_rm64(reg_1op(RBX));
     restore_regs_after_c_funcall(mls, a);
 }
 
@@ -922,9 +922,9 @@ static void set_bool(Asm::Assembler<WriterT> &a, bool &var, bool tf)
 {
     using namespace Asm;
 
-    a.mov_reg_imm64(RCX, PTR(&var));
+    a.mov_reg_imm64(RBX, PTR(&var));
     a.mov_reg_imm64(RAX, tf ? 1 : 0);
-    ASM<WriterT, sizeof(bool)*8>::mov_rmX_reg(a, mem_2op(AL, RCX));
+    ASM<WriterT, sizeof(bool)*8>::mov_rmX_reg(a, mem_2op(AL, RBX));
 }
 
 // This could just be inline ASM, but since we already have an assembler,
@@ -934,10 +934,10 @@ static void set_bool(Asm::Assembler<WriterT> &a, bool &var, bool tf)
         using namespace Asm; \
         VectorWriter bpw__; \
         VectorAssembler bpa__(bpw__); \
-        bpa__.mov_reg_imm64(RCX, PTR(&(bp_var))); \
-        bpa__.mov_rm64_reg(mem_2op(RBP, RCX)); \
-        bpa__.mov_reg_imm64(RCX, PTR(&(sp_var))); \
-        bpa__.mov_rm64_reg(mem_2op(RSP, RCX)); \
+        bpa__.mov_reg_imm64(RBX, PTR(&(bp_var))); \
+        bpa__.mov_rm64_reg(mem_2op(RBP, RBX)); \
+        bpa__.mov_reg_imm64(RBX, PTR(&(sp_var))); \
+        bpa__.mov_rm64_reg(mem_2op(RSP, RBX)); \
         bpa__.ret(); \
         bpw__.get_exec_func()(); \
     } while (0)
@@ -957,10 +957,10 @@ static void call_main_loop_setting_start_to(MainLoopState &mls, Asm::Assembler<W
     a.mov_moffs64_rax(PTR(&(mls.start)));
 
     // Call the innner main loop.
-    a.mov_reg_imm64(RCX, PTR(inner_main_loop));
+    a.mov_reg_imm64(RBX, PTR(inner_main_loop));
     a.mov_reg_imm64(RDI, PTR(&mls));
     a.mov_reg_imm64(RAX, 0);
-    a.call_rm64(reg_1op(RCX));
+    a.call_rm64(reg_1op(RBX));
 }
 
 static uint64_t get_64(std::vector<uint8_t>::const_iterator i)
