@@ -924,7 +924,7 @@ static void set_bool(Asm::Assembler<WriterT> &a, bool &var, bool tf)
 
     a.mov_reg_imm64(RBX, PTR(&var));
     a.mov_reg_imm64(RAX, tf ? 1 : 0);
-    ASM<WriterT, sizeof(bool)*8>::mov_rmX_reg(a, mem_2op(AL, RBX));
+    ASM<WriterT, sizeof(bool)*8>::mov_rmX_reg(a, mem_2op(RAX, RBX));
 }
 
 // This could just be inline ASM, but since we already have an assembler,
