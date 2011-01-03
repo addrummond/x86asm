@@ -13,7 +13,7 @@ using namespace Asm;
 namespace Asm {
 static const uint8_t register_codes[] = {
     0,1,2,3,4,5,6,7, // EAX-EDI
-    0,1,2,3,4,5,6,7, // R8D-R15D
+    0,1,2,3,4,5,6,7, // R8-R15
     0,1,2,3,4,5,6,7, // MM0-MM7
     0,1,2,3,4,5,6,7, // XMM0-XMM7
     0,1,2,3,4,5,6,7  // XMM8-XMM15
@@ -21,7 +21,7 @@ static const uint8_t register_codes[] = {
 static char const *register_names[] = {
     "EAX", "ECX", "EDX", "EBX", "ESP", "EBP", "ESI", "EDI",
     "RAX", "RCX", "RDX", "RBX", "RSP", "RBP", "RSI", "RDI",
-    "R8D", "R9D", "R10D", "R11D", "R12D", "R13D", "R14D", "R15D",
+    "R8", "R9", "R10", "R11", "R12", "R13", "R14", "R15",
     "MM0", "MM1", "MM2", "MM4", "MM5", "MM6", "MM7",
     "XMM0", "XMM1", "XMM2", "XMM3", "XMM4", "XMM5", "XMM6", "XMM7",
     "XMM8", "XMM9", "XMM10", "XMM11", "XMM12", "XMM13", "XMM14", "XMM15",
@@ -36,7 +36,7 @@ uint8_t Asm::register_code(Register reg) { assert(reg < FS); return register_cod
 // Registers which can be specified using +r* (in 64-bit mode).
 bool has_additive_code_64(Register r)
 {
-    return r >= RAX && r <= R15D;
+    return r >= RAX && r <= R15;
 }
 bool has_additive_code_32(Register r)
 {
@@ -47,7 +47,7 @@ namespace Asm {
 static unsigned register_byte_sizes[] = {
     4, 4, 4, 4, 4, 4, 4, 4,         // EAX-EDI
     8, 8, 8, 8, 8, 8, 8, 8,         // RAX-RDI
-    8, 8, 8, 8, 8, 8, 8, 8,         // R8D-R15D
+    8, 8, 8, 8, 8, 8, 8, 8,         // R8-R15
     10, 10, 10, 10, 10, 10, 10, 10, // MM0-MM7
     16, 16, 16, 16, 16, 16, 16, 16, // XMM0-XMM7
     16, 16, 16, 16, 16, 16, 16, 16, // XMM8-XMM15
@@ -66,7 +66,7 @@ static uint8_t raw_modrm(uint8_t mod, uint8_t rm, uint8_t reg)
 // Note that this excludes the 16-bit registers and 8-bit registers.
 static bool is_gp3264_register(Register reg)
 {
-    return (reg >= EAX && reg <= EDI) || (reg >= RAX && reg <= RDI) || (reg >= R8D && reg <= R15D);
+    return (reg >= EAX && reg <= EDI) || (reg >= RAX && reg <= RDI) || (reg >= R8 && reg <= R15);
 }
 static bool is_gp8_register(Register reg)
 {
@@ -80,7 +80,7 @@ static bool requires_sib(ModrmSib const &modrmsib)
 
 bool Asm::reg_is_forbidden_in_rm(Register reg)
 {
-    return reg == ESP || reg == RSP || reg == R12D;
+    return reg == ESP || reg == RSP || reg == R12;
 }
 
 struct RawModrmSib {
@@ -188,8 +188,8 @@ bool Asm::ModrmSib::simple_memory() const
 
 bool Asm::ModrmSib::gp3264_registers_only() const
 {
-    return (rm_reg == NOT_A_REGISTER || (rm_reg >= EAX && rm_reg <= R15D)) &&
-           (reg == NOT_A_REGISTER || (reg >= EAX && reg <= R15D));
+    return (rm_reg == NOT_A_REGISTER || (rm_reg >= EAX && rm_reg <= R15)) &&
+           (reg == NOT_A_REGISTER || (reg >= EAX && reg <= R15));
 }
 
 bool Asm::ModrmSib::gp8_registers_only() const
@@ -200,8 +200,8 @@ bool Asm::ModrmSib::gp8_registers_only() const
 
 bool Asm::ModrmSib::gp_registers_only() const
 {
-    return (rm_reg == NOT_A_REGISTER || (rm_reg >= EAX && rm_reg <= R15D) || (rm_reg >= AL && rm_reg <= BH)) &&
-           (reg == NOT_A_REGISTER || (reg >= EAX && reg <= R15D) || (reg >= AL && reg <= BH));
+    return (rm_reg == NOT_A_REGISTER || (rm_reg >= EAX && rm_reg <= R15) || (rm_reg >= AL && rm_reg <= BH)) &&
+           (reg == NOT_A_REGISTER || (reg >= EAX && reg <= R15) || (reg >= AL && reg <= BH));
 }
 
 bool Asm::ModrmSib::all_register_operands_have_size(Size size) const
@@ -270,16 +270,16 @@ static uint8_t compute_rex(ModrmSib const &modrmsib, Size size, bool allow_rex_w
 
     if (! requires_sib(modrmsib)) {//modrmsib.disp_size == DISP_SIZE_NONE || modrmsib.scale == SCALE_1) {
         // No SIB.
-        if (modrmsib.rm_reg >= R8D && modrmsib.rm_reg <= R15D)
+        if (modrmsib.rm_reg >= R8 && modrmsib.rm_reg <= R15)
             rex |= REX_B;
-        if (modrmsib.reg >= R8D && modrmsib.reg <= R15D)
+        if (modrmsib.reg >= R8 && modrmsib.reg <= R15)
             rex |= REX_R;
     }
     else {
         // Yes SIB.
-        if (modrmsib.rm_reg >= R8D && modrmsib.rm_reg <= R15D)
+        if (modrmsib.rm_reg >= R8 && modrmsib.rm_reg <= R15)
             rex |= REX_X;
-        if (modrmsib.reg >= R8D && modrmsib.reg <= R15D)
+        if (modrmsib.reg >= R8 && modrmsib.reg <= R15)
             rex |= REX_R;
     }
 
@@ -291,7 +291,7 @@ static uint8_t compute_rex_for_reg(Register reg, Size size, bool allow_rex_w=tru
 {
     uint8_t rex = (size == SIZE_64 && allow_rex_w ? REX_W : 0);
     rex |= REX_PREFIX;
-    if (reg >= R8D && reg <= R15D)
+    if (reg >= R8 && reg <= R15)
         rex |= REX_B;
     return rex;
 }
