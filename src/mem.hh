@@ -26,7 +26,7 @@ public:
         uint64_t untagged;
         uint64_t tagged;
     };
-    Allocation alloc_tagged_mem(std::size_t size, unsigned tag);
+    Allocation alloc_tagged_mem(std::size_t size, unsigned tag, unsigned second_tag);
 
 private:
     void *alloc_mem(std::size_t size);

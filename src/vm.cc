@@ -69,55 +69,59 @@ static char const *op_names[] = {
     "IADD",
     "IMUL",
     "IDIV",
-    "MKVEC",
-    "REVEC",
-    "REFVEC",
-    "SETVEC",
+    "MKIVEC0",
+    "MKIVECD",
+    "MKIVEC",
+    "REFIVEC",
+    "SETIVEC",
     "DEBUG_PRINTREG",
     "DEBUG_SAYHI"
 };
 
 #define END OPR_NULL
 static Operand const op_operand_specs[][4] = {
-    { OPR_REGISTER, END },                 // EXIT
-    { OPR_REGISTER, END },                 // INCRW
-    { END },                               // DECRW
-    { OPR_REGISTER, OPR_IMM16, END },      // LDI16
-    { OPR_REGISTER, OPR_IMM64, END },      // LDI64
+    { OPR_REGISTER, END },                       // EXIT
+    { OPR_REGISTER, END },                       // INCRW
+    { END },                                     // DECRW
+    { OPR_REGISTER, OPR_IMM16, END },            // LDI16
+    { OPR_REGISTER, OPR_IMM64, END },            // LDI64
 
-    { OPR_REGISTER, OPR_FLAGS, END },      // JMP
-    { OPR_IMM16, /*OPR_FLAGS,*/ END },     // CJMP
-    { OPR_REGISTER, OPR_IMM16, END },      // CALL
-    { OPR_REGISTER, END },                 // RET
-    { OPR_REGISTER, OPR_REGISTER, END },   // CMP
-    { OPR_REGISTER, END },                 // JE
-    { OPR_IMM16, END },                    // CJE
-    { OPR_REGISTER, END },                 // JNE
-    { OPR_REGISTER, END },                 // CJNE
-    { OPR_REGISTER, END },                 // JG
-    { OPR_IMM16, END },                    // CJG
-    { OPR_REGISTER, END },                 // JL
-    { OPR_IMM16, END },                    // CJL
+    { OPR_REGISTER, OPR_FLAGS, END },            // JMP
+    { OPR_IMM16, /*OPR_FLAGS,*/ END },           // CJMP
+    { OPR_REGISTER, OPR_IMM16, END },            // CALL
+    { OPR_REGISTER, END },                       // RET
+    { OPR_REGISTER, OPR_REGISTER, END },         // CMP
+    { OPR_REGISTER, END },                       // JE
+    { OPR_IMM16, END },                          // CJE
+    { OPR_REGISTER, END },                       // JNE
+    { OPR_REGISTER, END },                       // CJNE
+    { OPR_REGISTER, END },                       // JG
+    { OPR_IMM16, END },                          // CJG
+    { OPR_REGISTER, END },                       // JL
+    { OPR_IMM16, END },                          // CJL
 
-    { OPR_REGISTER, OPR_REGISTER, END },   // IADD
-    { OPR_REGISTER, OPR_REGISTER, END },   // IMUL
-    { OPR_REGISTER, OPR_REGISTER, END },   // IDIV
+    { OPR_REGISTER, OPR_REGISTER, END },         // IADD
+    { OPR_REGISTER, OPR_REGISTER, END },         // IMUL
+    { OPR_REGISTER, OPR_REGISTER, END },         // IDIV
 
-    { OPR_REGISTER, END },                 // MKVEC
-    { OPR_REGISTER, OPR_REGISTER, END },   // REVEC
-    { OPR_REGISTER, OPR_REGISTER, END },   // REFVEC
-    { OPR_REGISTER, OPR_REGISTER, END },   // SETVEC
+    { OPR_REGISTER, END },                       // MKIVEC0
+    { OPR_REGISTER, OPR_FLAGS, END },            // MKIVECD
+    { OPR_REGISTER, OPR_FLAGS, OPR_IMM64, END }, // MKIVEC
+    { OPR_REGISTER, OPR_REGISTER, END },         // REFIVEC
+    { OPR_REGISTER, OPR_REGISTER, END },         // SETIVEC
 
-    { OPR_REGISTER, END },                 // DEBUG_PRINTREG
-    { END }                                // DEBUG_SAYHI
+    { OPR_REGISTER, END },                       // DEBUG_PRINTREG
+    { END }                                      // DEBUG_SAYHI
 };
 #undef END
 
 const uint32_t Vm::FLAG_DESTINATION = 0x80000000;
 
 const unsigned Vm::TAG_INT = 0;
-const unsigned Vm::TAG_DOUBLE = 1;
-const unsigned Vm::TAG_VECTOR = 2;
+const unsigned Vm::TAG_BOOL = 1;
+const unsigned Vm::TAG_DOUBLE = 2;
+const unsigned Vm::TAG_VECTOR = 3;
+const unsigned Vm::TAG_NULL = 4;
 
 Operand const *Vm::op_operands(Opcode o)
 {
@@ -133,8 +137,10 @@ char const *Vm::tag_name(unsigned tag)
 {
     switch (tag) {
         case TAG_INT: return "int";
+        case TAG_BOOL: return "bool";
         case TAG_DOUBLE: return "double";
         case TAG_VECTOR: return "vector";
+        case TAG_NULL: return "tag_null";
         default: assert(false);
     }
 }
@@ -584,14 +590,14 @@ static void *my_malloc(size_t bytes)
     return r;
 }
 
-static void *call_alloc_tagged_mem(Mem::MemState &ms, std::size_t size, unsigned tag)
-{ ms.alloc_tagged_mem(size, tag); }
+static void *call_alloc_tagged_mem(Mem::MemState &ms, std::size_t size, unsigned tag, unsigned second_tag)
+{ ms.alloc_tagged_mem(size, tag, second_tag); }
 // Emit code to allocate tagged memory.
 // Leaves address (untagged) in RAX and tagged in RDX. (This
 // is how the Mem::MemState::Allocation structure is returned according
 // to the x86-64 ABI.)
 template <class WriterT>
-static void emit_alloc_tagged_mem(MainLoopState const &mls, Asm::Assembler<WriterT> &a, std::size_t size, RegId ptr_dest, unsigned tag)
+static void emit_alloc_tagged_mem(MainLoopState const &mls, Asm::Assembler<WriterT> &a, std::size_t size, RegId ptr_dest, unsigned tag, unsigned second_tag)
 {
     using namespace Asm;
 
@@ -601,9 +607,10 @@ static void emit_alloc_tagged_mem(MainLoopState const &mls, Asm::Assembler<Write
     a.mov_reg_imm64(RDI, PTR(&(mls.mem_state)));
     a.mov_reg_imm64(RSI, static_cast<uint64_t>(size));
     a.mov_reg_imm64(RDX, static_cast<uint64_t>(tag));
+    a.mov_reg_imm64(RCX, static_cast<uint64_t>(second_tag));
     a.mov_reg_imm64(RAX, 0);
-    a.mov_reg_imm64(RCX, PTR(call_alloc_tagged_mem));
-    a.call_rm64(reg_1op(RCX));
+    a.mov_reg_imm64(RBX, PTR(call_alloc_tagged_mem));
+    a.call_rm64(reg_1op(RBX));
     restore_regs_after_c_funcall(mls, a);
     move_x86reg_to_vmreg_ptr(a, ptr_dest, RDX);
 }
@@ -623,7 +630,7 @@ template <class WriterT>
 static void emit_ldi(MainLoopState const &mls, Asm::Assembler<WriterT> &a, RegId ptr_dest, uint64_t val)
 {
     using namespace Asm;
-    emit_alloc_tagged_mem(mls, a, 8, ptr_dest, TAG_INT); // Leaves untagged address in RAX.
+    emit_alloc_tagged_mem(mls, a, 8, ptr_dest, TAG_INT, 0); // Leaves untagged address in RAX.
     a.mov_reg_imm64(RCX, val);
     a.mov_rm64_reg(mem_2op(RCX, RAX));
 }
@@ -832,6 +839,34 @@ static void emit_jump(MainLoopState &mls, Asm::Assembler<WriterT> &a, WriterT &w
     }
 }
 
+//
+// Layout of a vector:
+//     0-3 64-bit words of memory reserved.
+//     4-7 Index of first free element.
+//
+template <class WriterT>
+static void emit_mkvec(MainLoopState const &mls,
+                       Asm::Assembler<WriterT> &a,
+                       RegId ptr_dest,
+                       unsigned type_tag,
+                       std::size_t initial_reservation,
+                       bool zero_fill)
+{
+    using namespace Asm;
+
+    // Can't have a vector of vectors or NULLs.
+    assert(type_tag != TAG_VECTOR & type_tag != TAG_NULL);
+
+    emit_alloc_tagged_mem(mls, a, (initial_reservation * 8) + 8, ptr_dest, TAG_VECTOR, type_tag);
+    assert(initial_reservation < (1 << 31));
+    // Add size/free pointer info.
+    a.mov_reg_imm32(ECX, static_cast<uint32_t>(initial_reservation));
+    a.mov_rm32_reg(mem_2op(ECX, RAX));
+    a.mov_reg_imm32(ECX, 0);
+    a.mov_rm32_reg(mem_2op(ECX, RAX, NOT_A_REGISTER/*index*/, SCALE_1, 4));
+    // If specified, 0-fill.
+}
+
 static void print_vm_reg(RegId rid, uint64_t tagged_ptr)
 {
     uint64_t tag = tagged_ptr & 0x0000000000000003;
@@ -928,6 +963,16 @@ static void call_main_loop_setting_start_to(MainLoopState &mls, Asm::Assembler<W
     a.call_rm64(reg_1op(RCX));
 }
 
+static uint64_t get_64(std::vector<uint8_t>::const_iterator i)
+{
+#define C(x) static_cast<uint64_t>(x)
+    return i[0] + (C(i[1]) << 8) + (C(i[2]) << 16) +
+           (C(i[3]) << 24) + (C(i[4]) << 32) +
+           (C(i[5]) << 40) + (C(i[6]) << 48) +
+           (C(i[7]) << 56);
+#undef C
+}
+
 static uint64_t inner_main_loop(MainLoopState &mls)
 {
     using namespace Asm;
@@ -1003,14 +1048,8 @@ static uint64_t inner_main_loop(MainLoopState &mls)
                 emit_ldi(mls, *a, i[1], i[2] + ((uint64_t)i[3] << 8));
             } break;
             case OP_LDI64: {
-#define C(x) static_cast<uint64_t>(x)
-                emit_ldi(mls, *a, i[1],
-                         i[4] + (C(i[5]) << 8) + (C(i[6]) << 16) +
-                         (C(i[7]) << 24) + (C(i[8]) << 32) +
-                         (C(i[9]) << 40) + (C(i[10]) << 48) +
-                         (C(i[11]) << 56));
+                emit_ldi(mls, *a, i[1], get_64(i + 4));
                 i += 8;
-#undef C
             } break;
             case OP_CMP: {
                 emit_cmp(*a, i[1], i[2]);
@@ -1033,7 +1072,20 @@ static uint64_t inner_main_loop(MainLoopState &mls)
             case OP_CJMP:
             case OP_CJE:
             case OP_CJNE: {
-                emit_jump(mls, *a, *w, (Opcode)*i, i[+1] + ((std::size_t)i[2] << 8));
+                emit_jump(mls, *a, *w, static_cast<Opcode>(*i), i[1] + ((std::size_t)i[2] << 8));
+            } break;
+            case OP_MKIVEC0:
+            case OP_MKIVECD:
+            case OP_MKIVEC: {
+                std::size_t initial_reservation = 0;
+                if (*i == OP_MKIVECD)
+                    initial_reservation = 10;
+                else if (*i == OP_MKIVEC) {
+                    initial_reservation = get_64(i + 4);
+                    i += 8;
+                }
+                    
+                emit_mkvec(mls, *a, i[1], TAG_INT, initial_reservation, (bool)(i[2]));
             } break;
             default: assert(false);
         }

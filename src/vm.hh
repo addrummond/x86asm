@@ -37,13 +37,14 @@ enum Opcode {
     OP_IMUL    = 20,
     OP_IDIV    = 21,
 
-    OP_MKVEC   = 22,
-    OP_REVEC   = 23,
-    OP_REFVEC  = 24,
-    OP_SETVEC  = 25,
+    OP_MKIVEC0  = 22,
+    OP_MKIVECD  = 23,
+    OP_MKIVEC   = 24,
+    OP_REFIVEC  = 25,
+    OP_SETIVEC  = 26,
 
-    OP_DEBUG_PRINTREG = 26,
-    OP_DEBUG_SAYHI = 27
+    OP_DEBUG_PRINTREG = 27,
+    OP_DEBUG_SAYHI = 28
 };
 extern const Opcode FIRST_OP;
 
@@ -62,8 +63,10 @@ typedef uint8_t RegId;
 extern const unsigned MAX_REG_ID;
 
 extern const unsigned TAG_INT;
+extern const unsigned TAG_BOOl;
 extern const unsigned TAG_DOUBLE;
 extern const unsigned TAG_VECTOR;
+extern const unsigned TAG_NULL;
 
 char const *tag_name(unsigned tag);
 char const *op_name(Opcode o);

@@ -41,13 +41,13 @@ void *Mem::MemState::alloc_mem(std::size_t size)
     return r;
 }
 
-Mem::MemState::Allocation Mem::MemState::alloc_tagged_mem(std::size_t size, unsigned tag)
+Mem::MemState::Allocation Mem::MemState::alloc_tagged_mem(std::size_t size, unsigned tag, unsigned second_tag)
 {
     assert(tag < 4);
 
     Allocation a;
     uint64_t *mem = static_cast<uint64_t *>(alloc_mem(size));
     a.untagged = reinterpret_cast<uint64_t>(mem);
-    a.tagged = a.untagged | tag;
+    a.tagged = a.untagged | static_cast<uint64_t>(tag) | (static_cast<uint64_t>(second_tag) << 61);
     return a;
 }
