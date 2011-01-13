@@ -841,12 +841,14 @@ static void emit_jump(MainLoopState &mls, Asm::Assembler<WriterT> &a, WriterT &w
 
 //
 // Layout of a vector:
-//     0-3 64-bit words of memory reserved.
+//     0-3 Number of 64-bit words of memory reserved.
 //     4-7 Index of first free element.
+//     ... Vector contents.
 //
 template <class WriterT>
 static void emit_mkvec(MainLoopState const &mls,
                        Asm::Assembler<WriterT> &a,
+                       WriterT &w,
                        RegId ptr_dest,
                        unsigned type_tag,
                        std::size_t initial_reservation,
@@ -866,10 +868,28 @@ static void emit_mkvec(MainLoopState const &mls,
     a.mov_rm32_reg(mem_2op(ECX, RAX));
     a.mov_reg_imm32(ECX, zero_fill ? static_cast<uint32_t>(initial_reservation) - 1); // If zero-filled, set free pointer to end.
     a.mov_rm32_reg(mem_2op(ECX, RAX, NOT_A_REGISTER/*index*/, SCALE_1, 4));
+
     // If specified, 0-fill.
     if (zero_fill) {
-        a.mov_reg_imm64(RAX, 0); // Index counter.
-        a.mov_reg_imm64(RBX, 
+        // The untagged address of the buffer will still be in RAX.
+        a.mov_reg_imm64(RBX, 0); // Index counter.
+        // **** TODO ***** MAKE SURE TO SAVE VALUE OF R?? (WHICH IS THE SAME AS XMM0) IF NECESSARY.
+        a.pxor_mm_mmm128(reg_2op(XMM0, XMM0)); // XOR XMM0 with itself to ensure that it's 0.
+        std::size_t loop_start = w.size();
+        a.movdqa(mem_2op(XMM0/*reg*/, RAX/*base*/, RBX/*index*/, SCALE_1));
+        a.add_rm64_imm8(reg_1op(RBX), 16);
+        a.cmp_rm64_imm32(reg_1op(RBX, (initial_reservation*8)-15));
+        std::size_t loop_end = w.size();
+        a.jl_st_rel8(mkdisp(static_cast<int8_t>(loop_start-loop_end), DISP_SUB_ISIZE));
+
+        // If the buffer size isn't a multiple of 16 (bytes), we'll need to fill the 8
+        // remaining bytes at the end.
+#ifdef DEBUG
+        unsigned remaining_bytes = initial_reservation % 16;
+        assert(remaining_bytes == 0 || remaining_bytes == 8);
+#endif
+        if (initial_reservation % 16 != 0)
+            a.movq(mem_2op(MM0/*reg*/, RAX/*base*/, RBX/*index*/, SCALE_1));
     }
 }
 
@@ -1091,7 +1111,7 @@ static uint64_t inner_main_loop(MainLoopState &mls)
                     i += 8;
                 }
                     
-                emit_mkvec(mls, *a, i[1], TAG_INT, initial_reservation, (bool)(i[2]));
+                emit_mkvec(mls, *a, *w, i[1], TAG_INT, initial_reservation, (bool)(i[2]));
             } break;
             default: assert(false);
         }

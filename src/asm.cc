@@ -997,7 +997,7 @@ INST(movdqa_mmm128_mm, 0x7F)
 template <class WriterT, uint8_t FINAL_OPCODE_BYTE>
 static void movq_(WriterT &w, ModrmSib const &modrmsib)
 {
-    assert(modrmsib.xmm_registers_only());
+    assert(modrmsib.mm_registers_only());
     ABIFNZ(compute_rex(modrmsib, SIZE_128));
     AB(0x0F);
     AB(FINAL_OPCODE_BYTE);
