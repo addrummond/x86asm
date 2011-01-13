@@ -435,7 +435,10 @@ public:
     void mov_reg_reg64(Register dest, Register src) { mov_reg_rm64(reg_2op(dest, src)); }
 
     // SSE(2) MOV* intructions.
-    void movdqa(ModrmSib const &modrmsib);
+    void movdqa_mm_mmm128(ModrmSib const &modrmsib);
+    void movdqa_mmm128_mm(ModrmSib const &modrmsib);
+    void movq_mm_mmm64(ModrmSib const &modrmsib);
+    void movq_mmm64_mm(ModrmSib const &modrmsib);
 
     // MUL
     void mul_edx_eax_rm32(ModrmSib const &modrmsib);
@@ -464,6 +467,10 @@ public:
     void push_reg64(Register reg);
     void push_imm8(uint8_t imm);
     void push_imm32(uint32_t imm);
+
+    // SSE2 PXOR
+    void pxor_mm_mmm64(ModrmSib const &modrmsib);
+    void pxor_mm_mmm128(ModrmSib const &modrmsib);
 
     // SUB
     void sub_rm32_reg(ModrmSib const &modrmsib);

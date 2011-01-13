@@ -856,15 +856,21 @@ static void emit_mkvec(MainLoopState const &mls,
 
     // Can't have a vector of vectors or NULLs.
     assert(type_tag != TAG_VECTOR & type_tag != TAG_NULL);
+    // Can't zero-fill a vector with no reserved space.
+    assert((!zero_fill) || initial_reservation > 0);
 
     emit_alloc_tagged_mem(mls, a, (initial_reservation * 8) + 8, ptr_dest, TAG_VECTOR, type_tag);
     assert(initial_reservation < (1 << 31));
     // Add size/free pointer info.
     a.mov_reg_imm32(ECX, static_cast<uint32_t>(initial_reservation));
     a.mov_rm32_reg(mem_2op(ECX, RAX));
-    a.mov_reg_imm32(ECX, 0);
+    a.mov_reg_imm32(ECX, zero_fill ? static_cast<uint32_t>(initial_reservation) - 1); // If zero-filled, set free pointer to end.
     a.mov_rm32_reg(mem_2op(ECX, RAX, NOT_A_REGISTER/*index*/, SCALE_1, 4));
     // If specified, 0-fill.
+    if (zero_fill) {
+        a.mov_reg_imm64(RAX, 0); // Index counter.
+        a.mov_reg_imm64(RBX, 
+    }
 }
 
 static void print_vm_reg(RegId rid, uint64_t tagged_ptr)

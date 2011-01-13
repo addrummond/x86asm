@@ -380,13 +380,46 @@ void test9()
     VectorWriter w;
     VectorAssembler a(w);
 
-    a.mov_reg_rm64(mem_2op(RDX, R13D));
+    a.mov_reg_rm64(mem_2op(RDX, R13));
     w.debug_print();
     std::string hex;
     w.canonical_hex(hex);
     std::printf("TEST 9\n\n");
     assert(hex == "49 8b 55 00");
     std::printf("* OK\n\n");
+}
+
+//
+// Test a couple of the SSE2 intructions.
+//
+void test10()
+{
+    VectorWriter w;
+    VectorAssembler a(w);
+
+    uint64_t nonzero_dwords[] = { 10, 20, 30, 40, 50, 60, 70, 80, 90, 100 };
+
+    // XOR xmm1 with itself to set its value to 0.
+    a.pxor_mm_mmm128(reg_2op(XMM1, XMM1));
+    // Get address of nonzero_dwords in RCX>
+    a.mov_reg_imm64(RCX, PTR(nonzero_dwords));
+    // Loop to zero out nonzero_dwords one quadword at a time.
+    a.mov_reg_imm64(RAX, 0); // Loop counter.
+    std::size_t loop_start = w.size();
+    a.movdqa_mmm128_mm(mem_2op(XMM1, RCX/*base*/, RAX/*index*/, SCALE_8));
+    a.add_rm64_imm8(reg_1op(RAX), 16);
+    a.cmp_rm64_imm32(reg_1op(RAX), sizeof(nonzero_dwords));
+    std::size_t loop_end = w.size();
+    a.jl_st_rel8(mkdisp(static_cast<int8_t>(loop_end-loop_start), DISP_SUB_ISIZE));
+    a.ret();
+
+    w.debug_print();
+    w.get_exec_func();
+
+    for (int i = 0; i < sizeof(nonzero_dwords) / sizeof(uint64_t); ++i) {
+        assert(nonzero_dwords[i] == 0);
+    }
+    std::printf("TEST 10\n* OK\n\n");
 }
 
 int main()
@@ -400,6 +433,7 @@ int main()
     test7();
     test8();
     test9();
+    test10();
 
     return 0;
 }

@@ -376,7 +376,6 @@ static void X_rm_reg_(WriterT &w, ModrmSib const &modrmsib)
 {
     assert(modrmsib.gp3264_registers_only() &&
            modrmsib.all_register_operands_have_size(RM_SIZE));
-
     ABIFNZ(compute_rex(modrmsib, RM_SIZE));
     AB(OPCODE);
     write_modrmsib_disp(w, modrmsib);
@@ -929,7 +928,6 @@ static void mov_rm_reg_(WriterT &w, ModrmSib const &modrmsib)
 {
     assert(modrmsib.gp_registers_only() /*&&
                                           modrmsib.all_register_operands_have_size(RM_SIZE)*/);
-
     ABIFNZ(compute_rex(modrmsib, RM_SIZE));
     AB(OPCODE);
     write_modrmsib_disp(w, modrmsib);
@@ -975,14 +973,41 @@ INST(mov_reg_imm64, uint64_t, SIZE_64)
 //
 // SSE(2) MOV* instructions.
 //
-template <class WriterT>
-void Asm::Assembler<WriterT>::movdqa(ModrmSib const &modrmsib)
+template <class WriterT, uint8_t FINAL_OPCODE_BYTE>
+static void movdqa_(WriterT &w, ModrmSib const &modrmsib)
 {
     assert(modrmsib.xmm_registers_only());
-    AZ("\x0F\xE7");
-    ABIFNZ(compute_rex(modrmsib, SIZE_128, /*allow_rex_w=*/false));
+    ABIFNZ(compute_rex(modrmsib, SIZE_128));
+    AZ("\x66\x0f");
+    AB(FINAL_OPCODE_BYTE);
     write_modrmsib_disp(w, modrmsib);
 }
+
+#define INST(name, final_opcode_byte) \
+    template <class WriterT> void Asm::Assembler<WriterT>:: \
+    name (ModrmSib const &modrmsib) \
+    { movdqa_<WriterT, final_opcode_byte>(w, modrmsib); }
+INST(movdqa_mm_mmm128, 0x6f)
+INST(movdqa_mmm128_mm, 0x7F)
+#undef INST
+
+template <class WriterT, uint8_t FINAL_OPCODE_BYTE>
+static void movq_(WriterT &w, ModrmSib const &modrmsib)
+{
+    assert(modrmsib.xmm_registers_only());
+    ABIFNZ(compute_rex(modrmsib, SIZE_128));
+    AB(0x0F);
+    AB(FINAL_OPCODE_BYTE);
+    write_modrmsib_disp(w, modrmsib);
+}
+
+#define INST(name, final_opcode_byte) \
+    template <class WriterT> void Asm::Assembler<WriterT>:: \
+    name (ModrmSib const &modrmsib) \
+    { movq_<WriterT, final_opcode_byte>(w, modrmsib); }
+INST(movq_mm_mmm64, 0x6F)
+INST(movq_mmm64_mm, 0x7F)
+#undef INST
 
 //
 // NOP
@@ -1054,6 +1079,26 @@ static void push_imm_(WriterT &w, ImmT imm)
     { push_imm_<WriterT, immt, immtsize, opcode>(w, imm); }
 INST(push_imm8, uint8_t, SIZE_8, 0x6A)
 INST(push_imm32, uint32_t, SIZE_32, 0x68)
+#undef INST
+
+//
+// PXOR
+//
+template <class WriterT, Size SIZE>
+static void pxor_(WriterT &w, ModrmSib const &modrmsib)
+{
+    assert(modrmsib.xmm_registers_only());
+    ABIFNZ(compute_rex(modrmsib, SIZE, false));
+    AZ(SIZE == SIZE_64 ? "\x0F\xEF" : "\x66\x0F\xEF");
+    write_modrmsib_disp(w, modrmsib);
+}
+
+#define INST(name, size) \
+    template <class WriterT> \
+    void Asm::Assembler<WriterT>:: name (ModrmSib const &modrmsib) \
+    { pxor_<WriterT, size>(w, modrmsib); }
+INST(pxor_mm_mmm64, SIZE_64)
+INST(pxor_mm_mmm128, SIZE_128)
 #undef INST
 
 //
