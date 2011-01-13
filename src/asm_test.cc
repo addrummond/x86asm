@@ -185,7 +185,7 @@ void test4()
     std::size_t loop_end = w.size();
 
     // Loop if 'fval' is less than 100.
-    a.ja_st_rel8(mkdisp(static_cast<int8_t>(-(loop_end-loop_start)), DISP_SUB_ISIZE), BRANCH_HINT_TAKEN);
+    a.ja_st_rel8(mkdisp(static_cast<int8_t>(loop_start-loop_end), DISP_SUB_ISIZE), BRANCH_HINT_TAKEN);
 
     a.ret();
 
@@ -390,7 +390,8 @@ void test9()
 }
 
 //
-// Test a couple of the SSE2 intructions.
+// Test a couple of the SSE2 intructions (PXOR and MOVDQA). This code zeros
+// an array one qword (128-bits) at a time.
 //
 void test10()
 {
@@ -399,27 +400,37 @@ void test10()
 
     uint64_t nonzero_dwords[] = { 10, 20, 30, 40, 50, 60, 70, 80, 90, 100 };
 
-    // XOR xmm1 with itself to set its value to 0.
-    a.pxor_mm_mmm128(reg_2op(XMM1, XMM1));
+    a.push_reg64(RBP); // Function preamble.
+    a.mov_reg_reg64(RBP, RSP);
+
+    // XOR xmm0 with itself to set its value to 0.
+    a.pxor_mm_mmm128(reg_2op(XMM0, XMM0));
     // Get address of nonzero_dwords in RCX>
     a.mov_reg_imm64(RCX, PTR(nonzero_dwords));
     // Loop to zero out nonzero_dwords one quadword at a time.
     a.mov_reg_imm64(RAX, 0); // Loop counter.
     std::size_t loop_start = w.size();
-    a.movdqa_mmm128_mm(mem_2op(XMM1, RCX/*base*/, RAX/*index*/, SCALE_8));
+    a.movdqa_mmm128_mm(mem_2op(XMM0/*reg*/, RCX/*base*/, RAX/*index*/, SCALE_1));
     a.add_rm64_imm8(reg_1op(RAX), 16);
     a.cmp_rm64_imm32(reg_1op(RAX), sizeof(nonzero_dwords));
     std::size_t loop_end = w.size();
-    a.jl_st_rel8(mkdisp(static_cast<int8_t>(loop_end-loop_start), DISP_SUB_ISIZE));
+    a.jl_st_rel8(mkdisp(static_cast<int8_t>(loop_start-loop_end), DISP_SUB_ISIZE));
+    a.leave();
     a.ret();
 
     w.debug_print();
-    w.get_exec_func();
+    w.get_exec_func()();
 
+    bool found_nonzero = false;
     for (int i = 0; i < sizeof(nonzero_dwords) / sizeof(uint64_t); ++i) {
-        assert(nonzero_dwords[i] == 0);
+        std::printf("%lli", nonzero_dwords[i]);
+        if (i + 1 < sizeof(nonzero_dwords) / sizeof(uint64_t))
+            printf(", ");
+        if (nonzero_dwords[i] != 0)
+            found_nonzero = true;
     }
-    std::printf("TEST 10\n* OK\n\n");
+    assert(! found_nonzero);
+    std::printf("\nTEST 10\n* OK\n\n");
 }
 
 int main()

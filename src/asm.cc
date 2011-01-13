@@ -75,7 +75,8 @@ static bool is_gp8_register(Register reg)
 
 static bool requires_sib(ModrmSib const &modrmsib)
 {
-    return !(modrmsib.disp_size == DISP_SIZE_NONE || modrmsib.scale == SCALE_1 || modrmsib.rm_reg == NOT_A_REGISTER);
+//    return !(modrmsib.disp_size == DISP_SIZE_NONE || /*modrmsib.scale == SCALE_1 ||*/ modrmsib.rm_reg == NOT_A_REGISTER);
+    return (modrmsib.base_reg != NOT_A_REGISTER || (modrmsib.disp_size != DISP_SIZE_NONE && modrmsib.disp != 0));
 }
 
 bool Asm::reg_is_forbidden_in_rm(Register reg)
@@ -93,6 +94,8 @@ static RawModrmSib raw_modrmsib(ModrmSib const &modrmsib)
     RawModrmSib r;
     r.has_disp = true;
     uint8_t mod, rm, reg;
+
+    bool reqs_sib = requires_sib(modrmsib);
 
     // The special case of RIP.
     if (modrmsib.rip) {
@@ -118,7 +121,7 @@ static RawModrmSib raw_modrmsib(ModrmSib const &modrmsib)
     else if (modrmsib.disp_size == DISP_SIZE_32)
         mod = 2;
     // Set rm.
-    if (modrmsib.scale != SCALE_1 || modrmsib.rm_reg == NOT_A_REGISTER)
+    if (reqs_sib)//(modrmsib.scale != SCALE_1 || modrmsib.rm_reg == NOT_A_REGISTER)
         rm = 4;
     else {
         assert(is_gp3264_register(modrmsib.rm_reg) && ((! reg_is_forbidden_in_rm(modrmsib.rm_reg) || mod == 3)));
@@ -134,7 +137,7 @@ static RawModrmSib raw_modrmsib(ModrmSib const &modrmsib)
     r.modrm = raw_modrm(mod, rm, reg);
 
     // Add SIB if required.
-    if (! requires_sib(modrmsib)) {//(mod == 3 || rm != 4) {
+    if (! reqs_sib) {//(mod == 3 || rm != 4) {
         r.sib = 0;
     }
     else {
@@ -170,7 +173,7 @@ static RawModrmSib raw_modrmsib(ModrmSib const &modrmsib)
 
 Register Asm::ModrmSib::simple_register() const
 {
-    if (scale == SCALE_1 && reg == NOT_A_REGISTER && disp_size == DISP_SIZE_NONE)
+    if (/*scale == SCALE_1 &&*/ reg == NOT_A_REGISTER && disp_size == DISP_SIZE_NONE)
         return rm_reg;
     else
         return NOT_A_REGISTER;
@@ -284,7 +287,7 @@ static uint8_t compute_rex(ModrmSib const &modrmsib, Size size, bool allow_rex_w
     if (size == SIZE_64)
         rex |= REX_W;
 
-    if (! requires_sib(modrmsib)) {//modrmsib.disp_size == DISP_SIZE_NONE || modrmsib.scale == SCALE_1) {
+    if (! requires_sib(modrmsib)) {
         // No SIB.
         if (is_extended_reg(modrmsib.rm_reg))
             rex |= REX_B;
@@ -1089,7 +1092,10 @@ static void pxor_(WriterT &w, ModrmSib const &modrmsib)
 {
     assert(modrmsib.xmm_registers_only());
     ABIFNZ(compute_rex(modrmsib, SIZE, false));
-    AZ(SIZE == SIZE_64 ? "\x0F\xEF" : "\x66\x0F\xEF");
+    if (SIZE == SIZE_64)
+        AZ("\x0F\xEF");
+    else
+        AZ("\x66\x0F\xEF");
     write_modrmsib_disp(w, modrmsib);
 }
 
