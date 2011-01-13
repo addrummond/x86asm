@@ -123,6 +123,8 @@ const unsigned Vm::TAG_DOUBLE = 2;
 const unsigned Vm::TAG_VECTOR = 3;
 const unsigned Vm::TAG_NULL = 4;
 
+const unsigned Vm::TAG_MASK = 7; // Lowest three bits.
+
 Operand const *Vm::op_operands(Opcode o)
 {
     return op_operand_specs[o-FIRST_OP];
@@ -335,6 +337,8 @@ bool Vm::parse_vm_asm(std::string const &input, std::vector<uint8_t> &instructio
     return true;
 }
 
+typedef void(*ErrorHandler)(struct MainLoopState &mls);
+
 struct MainLoopState {
     MainLoopState(Vm::VectorAssemblerBroker &ab_, std::vector<uint8_t> &instructions_)
         : ab(ab_), instructions(instructions_) { }
@@ -352,6 +356,8 @@ struct MainLoopState {
     bool last_instruction_exited;
 
     Mem::MemState mem_state;
+
+    ErrorHandler type_error_handler;
 
 #ifdef DEBUG
     struct Asm::CountingVectorWriter *last_writer;
@@ -646,11 +652,35 @@ static void emit_cmp(Asm::Assembler<WriterT> &a, RegId op1, RegId op2)
 }
 
 template <class WriterT>
-static void emit_iadd(Asm::Assembler<WriterT> &a, RegId r_dest, RegId r_src)
+static void check_tag(MainLoopState const &mls, Asm::Assembler<WriterT> &a, WriterT &w, Asm::Register x86reg, unsigned expected_tag_value, Asm::Register scratch_reg)
+{
+    using namespace Asm;
+
+    assert(x86reg != scratch_reg && expected_tag_value <= TAG_MASK);
+
+    a.mov_reg_rm64(reg_2op(scratch_reg, x86reg));
+    a.and_rm64_imm8(reg_1op(scratch_reg), (uint8_t)TAG_MASK);
+    a.cmp_rm64_imm8(reg_1op(scratch_reg), (uint8_t)expected_tag_value);
+    std::size_t current = w.size();
+    save_regs_before_c_funcall(mls, a);
+    a.mov_reg_imm64(RDI, PTR(&mls));
+    a.mov_reg_imm64(RBX, PTR(mls.type_error_handler));
+    a.call_rm64(reg_1op(RBX));
+    restore_regs_after_c_funcall(mls, a);
+    // TODO: Do something after it returns?
+}
+
+template <class WriterT>
+static void emit_iadd(MainLoopState const &mls, Asm::Assembler<WriterT> &a, WriterT &w, RegId r_dest, RegId r_src)
 {
     using namespace Asm;
     Register r1 = move_vmreg_ptr_to_x86reg(a, RDX, r_dest);
     Register r2 = move_vmreg_ptr_to_x86reg(a, RBX, r_src);
+
+    // Check that the values are integers.
+    check_tag(mls, a, w, RDX, TAG_INT, RCX/*scratch*/);
+    check_tag(mls, a, w, RBX, TAG_INT, RCX/*scratch*/);
+
     a.mov_reg_rm64(mem_2op(RAX, r1));
     a.add_reg_rm64(mem_2op(RAX, r2));
     a.mov_rm64_reg(mem_2op(RAX, r1));
@@ -866,7 +896,7 @@ static void emit_mkvec(MainLoopState const &mls,
     // Add size/free pointer info.
     a.mov_reg_imm32(ECX, static_cast<uint32_t>(initial_reservation));
     a.mov_rm32_reg(mem_2op(ECX, RAX));
-    a.mov_reg_imm32(ECX, zero_fill ? static_cast<uint32_t>(initial_reservation) - 1); // If zero-filled, set free pointer to end.
+    a.mov_reg_imm32(ECX, zero_fill ? static_cast<uint32_t>(initial_reservation) - 1 : 0); // If zero-filled, set free pointer to end.
     a.mov_rm32_reg(mem_2op(ECX, RAX, NOT_A_REGISTER/*index*/, SCALE_1, 4));
 
     // If specified, 0-fill.
@@ -876,9 +906,9 @@ static void emit_mkvec(MainLoopState const &mls,
         // **** TODO ***** MAKE SURE TO SAVE VALUE OF R?? (WHICH IS THE SAME AS XMM0) IF NECESSARY.
         a.pxor_mm_mmm128(reg_2op(XMM0, XMM0)); // XOR XMM0 with itself to ensure that it's 0.
         std::size_t loop_start = w.size();
-        a.movdqa(mem_2op(XMM0/*reg*/, RAX/*base*/, RBX/*index*/, SCALE_1));
+        a.movdqa_mmm128_mm(mem_2op(XMM0/*reg*/, RAX/*base*/, RBX/*index*/, SCALE_1));
         a.add_rm64_imm8(reg_1op(RBX), 16);
-        a.cmp_rm64_imm32(reg_1op(RBX, (initial_reservation*8)-15));
+        a.cmp_rm64_imm32(reg_1op(RBX), (initial_reservation*8)-15);
         std::size_t loop_end = w.size();
         a.jl_st_rel8(mkdisp(static_cast<int8_t>(loop_start-loop_end), DISP_SUB_ISIZE));
 
@@ -889,13 +919,19 @@ static void emit_mkvec(MainLoopState const &mls,
         assert(remaining_bytes == 0 || remaining_bytes == 8);
 #endif
         if (initial_reservation % 16 != 0)
-            a.movq(mem_2op(MM0/*reg*/, RAX/*base*/, RBX/*index*/, SCALE_1));
+            a.movq_mmm64_mm(mem_2op(MM0/*reg*/, RAX/*base*/, RBX/*index*/, SCALE_1));
     }
+}
+
+template <class WriterT>
+static void emit_refvec(MainLoopState const &mls, Asm::Assembler<WriterT> &a, RegId ptr_array, RegId ptr_index)
+{
+    
 }
 
 static void print_vm_reg(RegId rid, uint64_t tagged_ptr)
 {
-    uint64_t tag = tagged_ptr & 0x0000000000000003;
+    uint64_t tag = tagged_ptr & TAG_MASK;
     std::printf("- REGISTER %i\n- TAG      %lli (%s)\n", (int)rid, tag, tag_name(tag));
     if (tag == TAG_INT) {
         std::printf("- PTR:     0x%llx\n", (unsigned long long)tagged_ptr);
@@ -1081,7 +1117,7 @@ static uint64_t inner_main_loop(MainLoopState &mls)
                 emit_cmp(*a, i[1], i[2]);
             } break;
             case OP_IADD: {
-                emit_iadd(*a, i[1], i[2]);
+                emit_iadd(mls, *a, *w, i[1], i[2]);
             } break;
             case OP_DEBUG_PRINTREG: {
                 emit_debug_printreg(mls, *a, i[1]);
@@ -1141,6 +1177,11 @@ static uint64_t inner_main_loop(MainLoopState &mls)
     return 0;
 }
 
+static void type_error_handler(MainLoopState &mls)
+{
+    std::printf("\n\nTYPE ERROR!!!!!!\n\n");
+}
+
 uint64_t Vm::main_loop(std::vector<uint8_t> &instructions, std::size_t start, const std::size_t BLOB_SIZE)
 {
     using namespace Asm;
@@ -1160,6 +1201,8 @@ uint64_t Vm::main_loop(std::vector<uint8_t> &instructions, std::size_t start, co
 
     GET_BASE_POINTER_AND_STACK_POINTER(mls.initial_base_pointer_for_main_loop,
                                        mls.initial_stack_pointer_for_main_loop);
+
+    mls.type_error_handler = type_error_handler;
 
     return inner_main_loop(mls);
 }

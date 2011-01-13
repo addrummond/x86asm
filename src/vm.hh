@@ -68,6 +68,8 @@ extern const unsigned TAG_DOUBLE;
 extern const unsigned TAG_VECTOR;
 extern const unsigned TAG_NULL;
 
+extern const unsigned TAG_MASK;
+
 char const *tag_name(unsigned tag);
 char const *op_name(Opcode o);
 Operand const *op_operands(Opcode o);
