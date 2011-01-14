@@ -22,7 +22,12 @@ namespace static_assert
 namespace Util {
 
 void hex_dump(uint8_t const *mem, std::size_t length, std::string &o);
-void debug_hex_print(uint8_t const *mem, std::size_t length, unsigned lineLength=16, unsigned dotInterval = 4);
+    void debug_hex_print(uint8_t const *mem,
+                         std::size_t length,
+                         unsigned lineLength=16,
+                         unsigned dotInterval = 4,
+                         std::size_t highlight_start=0,
+                         std::size_t highlight_end=0);
 
 }
 

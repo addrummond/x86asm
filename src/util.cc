@@ -17,16 +17,51 @@ void Util::hex_dump(uint8_t const *mem, std::size_t length, std::string &o)
     }
 }
 
-void Util::debug_hex_print(uint8_t const *mem, std::size_t length, unsigned lineLength, unsigned dotInterval)
+void Util::debug_hex_print(uint8_t const *mem, std::size_t length, unsigned line_length, unsigned dot_interval, std::size_t highlight_start, std::size_t highlight_end)
 {
+    // Slight bug here -- can't highlight from position 0 (but this wouldn't be useful anyway).
+
+#define OPEN_CHAR "<"
+#define CLOSE_CHAR ">"
+
     std::printf("-----\n");
+    if (highlight_start != highlight_end)
+        std::printf(" ");
     for (std::size_t i = 0; i < length; ++i) {
         std::printf("%02x", static_cast<unsigned>(mem[i]));
-        if (lineLength != 0 && i != 0 && (i+1) % lineLength == 0)
-            std::printf("\n");
-        else if (dotInterval != 0 && i != 0 && (i+1) % dotInterval == 0 && i + 1 < length)
-            std::printf(" . ");
-        else printf(" ");
+        if (line_length != 0 && i != 0 && (i+1) % line_length == 0) {
+            if (highlight_start == highlight_end)
+                std::printf("\n");
+            else if (highlight_start == i + 1)
+                std::printf("\n" OPEN_CHAR);
+            else if (highlight_end == i + 1)
+                std::printf(CLOSE_CHAR "\n ");
+            else
+                std::printf("\n ");
+        }
+        else if (dot_interval != 0 && i != 0 && (i+1) % dot_interval == 0 && i + 1 < length) {
+            if (highlight_start == highlight_end)
+                std::printf(" . ");
+            else if (highlight_start == i + 1)
+                std::printf(" ." OPEN_CHAR);
+            else if (highlight_end == i + 1)
+                std::printf(CLOSE_CHAR ". ");
+            else
+                std::printf(" . ");
+        }
+        else {
+            if (highlight_start == highlight_end)
+                std::printf(" ");
+            else if (highlight_start == i + 1)
+                std::printf(OPEN_CHAR);
+            else if (highlight_end == i + 1)
+                std::printf(CLOSE_CHAR);
+            else
+                std::printf(" ");
+        }
     }
     std::printf("\n-----\n\n");
+
+#undef OPEN_CHAR
+#undef CLOSE_CHAR
 }

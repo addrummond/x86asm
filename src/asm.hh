@@ -512,10 +512,13 @@ public:
     void a(uint8_t byte);
     void a(VectorWriter const &vw);
 
+    template <class IntT>
+    void set_at(std::size_t index, IntT value);
+
     std::size_t size() const;
 
     void canonical_hex(std::string &o);
-    void debug_print(std::size_t offset=0);
+    void debug_print(std::size_t offset=0, std::size_t highlight_start = 0, std::size_t highlight_end = 0);
 
     typedef void (*voidf)(void);
     uint8_t *get_mem(int64_t offset=0);

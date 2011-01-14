@@ -1206,6 +1206,18 @@ void Asm::VectorWriter::a(VectorWriter const &vw)
     a(vw.mem, vw.length - vw.freebytes);
 }
 
+template <class IntT>
+void Asm::VectorWriter::set_at(std::size_t index, IntT value)
+{
+    assert(index * sizeof(IntT) < (length - freebytes));
+    reinterpret_cast<IntT *>(mem)[index] = value;
+}
+#define INST(t) \
+    template void Asm::VectorWriter::set_at<t>(std::size_t index, t value);
+INST(int8_t) INST(uint8_t) INST(int32_t) INST(uint32_t) INST(int64_t) INST(uint64_t)
+#undef INST
+
+
 std::size_t Asm::VectorWriter::size() const
 {
     return length - freebytes;
@@ -1217,9 +1229,9 @@ void Asm::VectorWriter::canonical_hex(std::string &o)
     Util::hex_dump(mem, length - freebytes, o);
 }
 
-void Asm::VectorWriter::debug_print(std::size_t offset)
+void Asm::VectorWriter::debug_print(std::size_t offset, std::size_t highlight_start, std::size_t highlight_end)
 {
-    Util::debug_hex_print(mem + offset, length - freebytes - offset);
+    Util::debug_hex_print(mem + offset, length - freebytes - offset, 16, 4, highlight_start, highlight_end);
 }
 
 uint8_t *Asm::VectorWriter::get_mem(int64_t offset)

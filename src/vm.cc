@@ -661,13 +661,15 @@ static void check_tag(MainLoopState const &mls, Asm::Assembler<WriterT> &a, Writ
     a.mov_reg_rm64(reg_2op(scratch_reg, x86reg));
     a.and_rm64_imm8(reg_1op(scratch_reg), (uint8_t)TAG_MASK);
     a.cmp_rm64_imm8(reg_1op(scratch_reg), (uint8_t)expected_tag_value);
-    std::size_t current = w.size();
+    a.jne_st_rel8(0); // Going to fill this in in a minute.
+    std::size_t byte = w.size();
     save_regs_before_c_funcall(mls, a);
     a.mov_reg_imm64(RDI, PTR(&mls));
     a.mov_reg_imm64(RBX, PTR(mls.type_error_handler));
     a.call_rm64(reg_1op(RBX));
     restore_regs_after_c_funcall(mls, a);
-    // TODO: Do something after it returns?
+    std::size_t af = w.size();
+    w.set_at(byte - 1, (int8_t)(af - byte));
 }
 
 template <class WriterT>
