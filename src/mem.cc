@@ -47,6 +47,11 @@ Mem::MemState::Allocation Mem::MemState::alloc_tagged_mem(std::size_t size, unsi
 
     Allocation a;
     uint64_t *mem = static_cast<uint64_t *>(alloc_mem(size));
+#ifdef DEBUG
+    if ((uint64_t)mem % 8 != 0)
+        std::printf("\n\n*** UNALIGNED MEM ***\n\n");
+    assert((uint64_t)mem % 8 == 0);
+#endif
     a.untagged = reinterpret_cast<uint64_t>(mem);
     a.tagged = a.untagged | static_cast<uint64_t>(tag) | (static_cast<uint64_t>(second_tag) << 61);
     return a;

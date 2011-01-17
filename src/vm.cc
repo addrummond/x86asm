@@ -358,6 +358,7 @@ struct MainLoopState {
     Mem::MemState mem_state;
 
     ErrorHandler type_error_handler;
+    boost::shared_ptr<Asm::VectorWriter> type_error_handler_asm;
 
 #ifdef DEBUG
     struct Asm::CountingVectorWriter *last_writer;
@@ -596,6 +597,26 @@ static void *my_malloc(size_t bytes)
     return r;
 }
 
+template <class WriterT>
+static void debug_print_x86reg64(Asm::Assembler<WriterT> &a, Asm::Register r, const char *preamble)
+{
+    using namespace Asm;
+    const char *format = "%s%llx\n";
+    a.push_reg64(RCX);
+    a.push_reg64(RBX);
+    a.push_reg64(r);
+    a.mov_reg_imm64(RDI, PTR(format));
+    a.mov_reg_imm64(RSI, PTR(preamble));
+    a.mov_reg_reg64(RBX, RSP);
+    a.mov_reg_rm64(mem_2op_short(RDX, RBX));
+    a.mov_reg_imm64(RCX, PTR(std::printf));
+    a.mov_reg_imm32(EAX, 0);
+    a.call_rm64(reg_1op(RCX));
+    a.pop_reg64(r);
+    a.pop_reg64(RBX);
+    a.pop_reg64(RCX);
+}
+
 static void *call_alloc_tagged_mem(Mem::MemState &ms, std::size_t size, unsigned tag, unsigned second_tag)
 { ms.alloc_tagged_mem(size, tag, second_tag); }
 // Emit code to allocate tagged memory.
@@ -651,25 +672,53 @@ static void emit_cmp(Asm::Assembler<WriterT> &a, RegId op1, RegId op2)
     a.cmp_rm64_reg(mem_2op(RAX, r1));
 }
 
+static void type_error_handler(MainLoopState &mls)
+{
+    std::printf("\n\nTYPE ERROR!!!!!!\n\n");
+}
+// The main purpose of this is to generate a function with a reference to the main loop
+// state 'baked' in. This means that the tag-checking code doesn't have to pass this
+// parameter in.
+template <class WriterT>
+static boost::shared_ptr<WriterT> gen_type_error_handler_asm(MainLoopState const &mls)
+{
+    using namespace Asm;
+    boost::shared_ptr<WriterT> w(new WriterT);
+    Asm::Assembler<WriterT> a(*w);
+
+    a.push_reg64(RBP); // Function preamble.
+    a.mov_reg_reg64(RBP, RSP);
+
+    save_regs_before_c_funcall(mls, a);
+    a.mov_reg_imm64(RDI, PTR(&mls));
+    a.mov_reg_imm64(RBX, PTR(mls.type_error_handler));
+//    a.mov_reg_imm32(EAX, 0);
+    a.call_rm64(reg_1op(RBX));
+    restore_regs_after_c_funcall(mls, a);
+
+    a.leave();
+    a.ret();
+
+    return w;
+}
+
 template <class WriterT>
 static void check_tag(MainLoopState const &mls, Asm::Assembler<WriterT> &a, WriterT &w, Asm::Register x86reg, unsigned expected_tag_value, Asm::Register scratch_reg)
 {
     using namespace Asm;
 
-    assert(x86reg != scratch_reg && expected_tag_value <= TAG_MASK);
+    assert(x86reg != scratch_reg && scratch_reg != RAX && scratch_reg != EAX && expected_tag_value <= TAG_MASK);
 
     a.mov_reg_rm64(reg_2op(scratch_reg, x86reg));
     a.and_rm64_imm8(reg_1op(scratch_reg), (uint8_t)TAG_MASK);
     a.cmp_rm64_imm8(reg_1op(scratch_reg), (uint8_t)expected_tag_value);
     a.jne_st_rel8(0); // Going to fill this in in a minute.
     std::size_t byte = w.size();
-    save_regs_before_c_funcall(mls, a);
-    a.mov_reg_imm64(RDI, PTR(&mls));
-    a.mov_reg_imm64(RBX, PTR(mls.type_error_handler));
-    a.call_rm64(reg_1op(RBX));
-    restore_regs_after_c_funcall(mls, a);
+    a.mov_reg_imm64(scratch_reg, mls.type_error_handler_asm->get_start_addr());
+    a.mov_reg_imm32(EAX, 0);
+    a.call_rm64(reg_1op(scratch_reg));
     std::size_t af = w.size();
-    w.set_at(byte - 1, (int8_t)(af - byte));
+    w.set_at(byte - 1, (int8_t)(af - byte)); // Set single-byte relative jump offset.
 }
 
 template <class WriterT>
@@ -706,26 +755,6 @@ static void emit_exit(MainLoopState const &mls, Asm::Assembler<WriterT> &a, RegI
 
     a.leave(); // Now that we've reset ESP/EBP, calling leave/ret
     a.ret();   // will return from main_loop_.
-}
-
-template <class WriterT>
-static void debug_print_x86reg64(Asm::Assembler<WriterT> &a, Asm::Register r, const char *preamble)
-{
-    using namespace Asm;
-    const char *format = "%s%llx\n";
-    a.push_reg64(RCX);
-    a.push_reg64(RBX);
-    a.push_reg64(r);
-    a.mov_reg_imm64(RDI, PTR(format));
-    a.mov_reg_imm64(RSI, PTR(preamble));
-    a.mov_reg_reg64(RBX, RSP);
-    a.mov_reg_rm64(mem_2op_short(RDX, RBX));
-    a.mov_reg_imm64(RCX, PTR(std::printf));
-    a.mov_reg_imm32(EAX, 0);
-    a.call_rm64(reg_1op(RCX));
-    a.pop_reg64(r);
-    a.pop_reg64(RBX);
-    a.pop_reg64(RCX);
 }
 
 static const Asm::Register gp_regs[] = {
@@ -1179,11 +1208,6 @@ static uint64_t inner_main_loop(MainLoopState &mls)
     return 0;
 }
 
-static void type_error_handler(MainLoopState &mls)
-{
-    std::printf("\n\nTYPE ERROR!!!!!!\n\n");
-}
-
 uint64_t Vm::main_loop(std::vector<uint8_t> &instructions, std::size_t start, const std::size_t BLOB_SIZE)
 {
     using namespace Asm;
@@ -1201,10 +1225,12 @@ uint64_t Vm::main_loop(std::vector<uint8_t> &instructions, std::size_t start, co
     mls.last_asm_offset = 0;
 #endif
 
+    mls.type_error_handler = type_error_handler;
+
+    mls.type_error_handler_asm = gen_type_error_handler_asm<Asm::VectorWriter>(mls);
+
     GET_BASE_POINTER_AND_STACK_POINTER(mls.initial_base_pointer_for_main_loop,
                                        mls.initial_stack_pointer_for_main_loop);
-
-    mls.type_error_handler = type_error_handler;
 
     return inner_main_loop(mls);
 }
