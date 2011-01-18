@@ -674,7 +674,8 @@ static void emit_cmp(Asm::Assembler<WriterT> &a, RegId op1, RegId op2)
 
 static void type_error_handler(MainLoopState &mls)
 {
-    std::printf("\n\nTYPE ERROR!!!!!!\n\n");
+    std::printf("\n\n*** TYPE ERROR ***\n\n");
+    std::exit(1);
 }
 // The main purpose of this is to generate a function with a reference to the main loop
 // state 'baked' in. This means that the tag-checking code doesn't have to pass this
@@ -686,18 +687,19 @@ static boost::shared_ptr<WriterT> gen_type_error_handler_asm(MainLoopState const
     boost::shared_ptr<WriterT> w(new WriterT);
     Asm::Assembler<WriterT> a(*w);
 
-    a.push_reg64(RBP); // Function preamble.
-    a.mov_reg_reg64(RBP, RSP);
+//    a.push_reg64(RBP); // Function preamble.
+//    a.mov_reg_reg64(RBP, RSP);
 
     save_regs_before_c_funcall(mls, a);
     a.mov_reg_imm64(RDI, PTR(&mls));
     a.mov_reg_imm64(RBX, PTR(mls.type_error_handler));
-//    a.mov_reg_imm32(EAX, 0);
+    a.mov_reg_imm32(EAX, 0);
     a.call_rm64(reg_1op(RBX));
+    // Won't actually get here.
     restore_regs_after_c_funcall(mls, a);
 
-    a.leave();
-    a.ret();
+///    a.leave();
+//    a.ret();
 
     return w;
 }
@@ -712,11 +714,11 @@ static void check_tag(MainLoopState const &mls, Asm::Assembler<WriterT> &a, Writ
     a.mov_reg_rm64(reg_2op(scratch_reg, x86reg));
     a.and_rm64_imm8(reg_1op(scratch_reg), (uint8_t)TAG_MASK);
     a.cmp_rm64_imm8(reg_1op(scratch_reg), (uint8_t)expected_tag_value);
-    a.jne_st_rel8(0); // Going to fill this in in a minute.
+    a.je_st_rel8(0); // Going to fill this in in a minute.
     std::size_t byte = w.size();
     a.mov_reg_imm64(scratch_reg, mls.type_error_handler_asm->get_start_addr());
     a.mov_reg_imm32(EAX, 0);
-    a.call_rm64(reg_1op(scratch_reg));
+    a.jmp_nr_rm64(reg_1op(scratch_reg));
     std::size_t af = w.size();
     w.set_at(byte - 1, (int8_t)(af - byte)); // Set single-byte relative jump offset.
 }
@@ -729,8 +731,8 @@ static void emit_iadd(MainLoopState const &mls, Asm::Assembler<WriterT> &a, Writ
     Register r2 = move_vmreg_ptr_to_x86reg(a, RBX, r_src);
 
     // Check that the values are integers.
-    check_tag(mls, a, w, RDX, TAG_INT, RCX/*scratch*/);
-    check_tag(mls, a, w, RBX, TAG_INT, RCX/*scratch*/);
+    check_tag(mls, a, w, RDX, TAG_INT, RSI/*scratch*/);
+    check_tag(mls, a, w, RBX, TAG_INT, RSI/*scratch*/);
 
     a.mov_reg_rm64(mem_2op(RAX, r1));
     a.add_reg_rm64(mem_2op(RAX, r2));
@@ -990,8 +992,9 @@ static void emit_debug_sayhi(MainLoopState const &mls, Asm::Assembler<WriterT> &
 {
     using namespace Asm;
 
-    a.mov_reg_imm64(RBX, PTR(sayhi));
     save_regs_before_c_funcall(mls, a);
+    a.mov_reg_imm64(RBX, PTR(sayhi));
+    a.mov_reg_imm32(EAX, 0);
     a.call_rm64(reg_1op(RBX));
     restore_regs_after_c_funcall(mls, a);
 }
