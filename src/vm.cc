@@ -807,12 +807,12 @@ static void save_regs_before_c_funcall(MainLoopState const &mls, Asm::Assembler<
 {
     using namespace Asm;
     for (int i = 0; i < NUM_VM_REGS_IN_X86_REGS && i < mls.current_num_vm_registers; ++i) {
-//    for (int i = 0; i < sizeof(vm_regs_x86_regs) / sizeof(Register); ++i) {
+//  for (int i = 0; i < sizeof(vm_regs_x86_regs) / sizeof(Register); ++i) {
         if (vm_regs_x86_regs_to_save[i]) {
-//        if (true) {
+//      if (true) {
             Register r = vm_regs_x86_regs[i];
             a.push_rm64(reg_1op(r));
-//            std::printf("SAVED %s\n", register_name(r));
+//          std::printf("SAVED %s\n", register_name(r));
         }
     }
 }
