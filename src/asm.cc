@@ -15,6 +15,7 @@ bool Asm::DEBUG_STEP_BY_DEFAULT = false;
 namespace Asm {
 static const uint8_t register_codes[] = {
     0,1,2,3,4,5,6,7, // EAX-EDI
+    0,1,2,3,4,5,6,7, // RAX-RDI
     0,1,2,3,4,5,6,7, // R8-R15
     0,1,2,3,4,5,6,7, // MM0-MM7
     0,1,2,3,4,5,6,7, // XMM0-XMM7
@@ -24,7 +25,7 @@ static char const *register_names[] = {
     "EAX", "ECX", "EDX", "EBX", "ESP", "EBP", "ESI", "EDI",
     "RAX", "RCX", "RDX", "RBX", "RSP", "RBP", "RSI", "RDI",
     "R8", "R9", "R10", "R11", "R12", "R13", "R14", "R15",
-    "MM0", "MM1", "MM2", "MM4", "MM5", "MM6", "MM7",
+    "MM0", "MM1", "MM2", "MM3", "MM4", "MM5", "MM6", "MM7",
     "XMM0", "XMM1", "XMM2", "XMM3", "XMM4", "XMM5", "XMM6", "XMM7",
     "XMM8", "XMM9", "XMM10", "XMM11", "XMM12", "XMM13", "XMM14", "XMM15",
     "AL", "CL", "DL", "BL", "AH", "CH", "DH", "BH"
@@ -32,8 +33,17 @@ static char const *register_names[] = {
     "NOT_A_REGISTER"
 };
 }
-char const *Asm::register_name(Register reg) { return register_names[reg]; }
-uint8_t Asm::register_code(Register reg) { assert(reg < FS); return register_codes[reg]; }
+char const *Asm::register_name(Register reg) {
+    assert(reg < sizeof(register_names)/sizeof(char const *));
+    return register_names[reg];
+}
+uint8_t Asm::register_code(Register reg)
+{
+    assert(reg < (sizeof(register_codes)/sizeof(uint8_t)));
+    uint8_t r = register_codes[reg];
+    assert(r <= 7);
+    return r;
+}
 
 // Registers which can be specified using +r* (in 64-bit mode).
 bool has_additive_code_64(Register r)
@@ -60,7 +70,7 @@ unsigned Asm::register_byte_size(Register reg) { assert(reg <= BH); return regis
 
 static uint8_t raw_modrm(uint8_t mod, uint8_t rm, uint8_t reg)
 {
-//    std::printf("raw MOD %x RM %x REG %x\n", mod, rm, reg);
+//    std::printf("raw MOD %i RM %i REG %i\n", mod, rm, reg);
     assert(mod < 5 && rm < 9 && reg < 9);
     return (mod << 6) | (reg << 3) | rm;
 }
@@ -149,7 +159,9 @@ static RawModrmSib raw_modrmsib(ModrmSib const &modrmsib)
 
         // Set mod.
         uint8_t sib_mod, sib_rm, sib_reg;
-        if (modrmsib.scale == SCALE_2)
+        if (modrmsib.scale == SCALE_1)
+            sib_mod = 0;
+        else if (modrmsib.scale == SCALE_2)
             sib_mod = 1;
         else if (modrmsib.scale == SCALE_4)
             sib_mod = 2;
@@ -168,6 +180,7 @@ static RawModrmSib raw_modrmsib(ModrmSib const &modrmsib)
         sib_reg = register_code(base_reg);
 
         // Note that reg/rm are in the opposite order as compared to the real modrm byte.
+//        std::printf("SIB %i\n", sib_mod);
         r.sib = raw_modrm(sib_mod, sib_reg, sib_rm);
     }
 
@@ -457,8 +470,8 @@ template <class WriterT, Size RM_SIZE, class ImmT, Size IMM_SIZE, uint8_t SIMPLE
 static void add_rmXX_imm32_(Assembler<WriterT> &a, WriterT &w, ModrmSib modrmsib, ImmT src)
 {
     assert((! modrmsib.has_reg_operand()) &&
-           modrmsib.gp3264_registers_only() &&
-           modrmsib.all_register_operands_have_size(RM_SIZE));
+           modrmsib.gp3264_registers_only() /*&&
+           modrmsib.all_register_operands_have_size(RM_SIZE)*/);
 
     DEBUG_STEPPING(a);
 
@@ -1231,6 +1244,12 @@ void Asm::Assembler<WriterT>::emit_step_point()
     for (int i = RAX; i <= R15; ++i) {
         push_rm64(reg_1op(static_cast<Register>(i)));
     }
+    // Push all XMM registers.
+    mov_reg_rm64(reg_2op(RCX, RSP)); // Can't use RSP as base reg owing to weird x86 instruction encoding.
+    for (int i = XMM0; i < XMM15; ++i) {
+        movdqa_mmm128_mm(mem_2op(static_cast<Register>(i)/*reg*/, RCX/*base*/, NOT_A_REGISTER/*index*/, SCALE_1, (i-XMM0+1)*-16));
+    }
+    sub_rm32_imm32(reg_1op(RSP), 16*16);
     // Save flags register.
     pushf();
 
@@ -1251,6 +1270,11 @@ void Asm::Assembler<WriterT>::emit_step_point()
 
     // Restore saved registers.
     popf();
+    mov_reg_rm64(reg_2op(RCX, RSP)); // Can't use RSP as base reg owing to weird x86 instruction encoding.
+    for (int i = XMM15; i >= XMM0; --i) {
+        movdqa_mm_mmm128(mem_2op(static_cast<Register>(i)/*reg*/, RCX/*base*/, NOT_A_REGISTER/*index*/, SCALE_1, (XMM15-i+1)*-16));
+    }
+    add_rm32_imm32(reg_1op(RSP), 16*16);
     for (int i = R15; i >= RAX; --i) {
         pop_rm64(reg_1op(static_cast<Register>(i)));
     }
