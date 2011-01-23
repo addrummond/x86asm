@@ -257,11 +257,11 @@ void test6()
     a.push_reg64(RBP); // Function preamble.
     a.mov_reg_reg64(RBP, RSP);
 
-    // TODO: Why does this need 3 and not 2?
-    a.call_rel32(mkdisp(3, DISP_ADD_ISIZE));
+    // TODO: Why does pushing RBP again cause a segfault?
+    a.call_rel32(mkdisp(2, DISP_ADD_ISIZE));
     a.leave(); // 1 byte
     a.ret();   // 1 byte
-    a.push_reg64(RBP);
+//    a.push_reg64(RBP);
     a.mov_rm64_reg(reg_2op(RSP, RBP));
     a.sub_rm64_imm8(reg_1op(RBP), 2);
     a.mov_reg_imm64(RAX, 15);
@@ -372,7 +372,7 @@ after:
 }
 
 //
-// Test that encoding of an add instruction is correct. (This is a bit random -- it
+// Test that encoding of a MOV instruction is correct. (This is a bit random -- it
 // was used while fixing a particular bug, but is still a good test to run.)
 //
 void test9()
@@ -435,6 +435,8 @@ void test10()
 
 int main()
 {
+    DEBUG_STEP_BY_DEFAULT = true;
+
     test1();
     test2();
     test3();

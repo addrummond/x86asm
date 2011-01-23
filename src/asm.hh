@@ -168,10 +168,17 @@ private:
 template <class IntT>
 Disp<IntT> mkdisp(IntT i, DispOp op = DISP_NO_OP);
 
+#ifdef DEBUG
+extern bool DEBUG_STEP_BY_DEFAULT;
+#endif
 template <class WriterT>
 class Assembler {
 public:
-    Assembler(WriterT &writer) : w(writer) { }
+    Assembler(WriterT &writer) : w(writer)
+#ifdef DEBUG
+    ,debug_stepping(DEBUG_STEP_BY_DEFAULT)
+#endif
+   { }
 
     // ADC
     void adc_rm32_reg(ModrmSib const &modrmsib);
@@ -461,12 +468,18 @@ public:
     void pop_rm64(ModrmSib const &modrmsib);
     void pop_reg64(Register reg);
 
+    // POPF
+    void popf();
+
     // PUSH
     void push_rm16(ModrmSib const &modrmsib);
     void push_rm64(ModrmSib const &modrmsib);
     void push_reg64(Register reg);
     void push_imm8(uint8_t imm);
     void push_imm32(uint32_t imm);
+
+    // PUSHF
+    void pushf();
 
     // SSE2 PXOR
     void pxor_mm_mmm64(ModrmSib const &modrmsib);
@@ -495,8 +508,20 @@ public:
     void xor_rm32_imm32(ModrmSib const &modrmsib, uint32_t src);
     void xor_rm64_imm32(ModrmSib const &modrmsib, uint32_t src);
 
+#ifdef DEBUG
+    void start_debug_stepping() { debug_stepping = true; }
+    void stop_debug_stepping() { debug_stepping = false; }
+    bool debug_stepping_is_on() const { return debug_stepping; }
+    void emit_step_point();
+#endif
+
 private:
     WriterT &w;
+
+#ifdef DEBUG
+    bool debug_stepping;
+    std::vector<std::string> listing;
+#endif
 };
 
 class VectorWriter {

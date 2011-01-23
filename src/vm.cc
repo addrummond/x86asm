@@ -597,24 +597,22 @@ static void *my_malloc(size_t bytes)
     return r;
 }
 
+static void myprint(char const *preamble, uint64_t value)
+{
+    std::printf("%s%llx\n", preamble, value);
+}
 template <class WriterT>
-static void debug_print_x86reg64(Asm::Assembler<WriterT> &a, Asm::Register r, const char *preamble)
+static void debug_print_x86reg64(MainLoopState const &mls, Asm::Assembler<WriterT> &a, Asm::Register r, const char *preamble)
 {
     using namespace Asm;
-    const char *format = "%s%llx\n";
-    a.push_reg64(RCX);
-    a.push_reg64(RBX);
-    a.push_reg64(r);
-    a.mov_reg_imm64(RDI, PTR(format));
-    a.mov_reg_imm64(RSI, PTR(preamble));
-    a.mov_reg_reg64(RBX, RSP);
-    a.mov_reg_rm64(mem_2op_short(RDX, RBX));
-    a.mov_reg_imm64(RCX, PTR(std::printf));
-    a.mov_reg_imm32(EAX, 0);
+
+    save_regs_before_c_funcall(mls, a);
+    if (r != RDX)
+        a.mov_reg_reg64(RDX, r); // Second argument to printf.
+    a.mov_reg_imm64(RDI, PTR(preamble)); // First argument to printf.
+    a.mov_reg_imm64(RCX, PTR(myprint));
     a.call_rm64(reg_1op(RCX));
-    a.pop_reg64(r);
-    a.pop_reg64(RBX);
-    a.pop_reg64(RCX);
+    restore_regs_after_c_funcall(mls, a);
 }
 
 static void *call_alloc_tagged_mem(Mem::MemState &ms, std::size_t size, unsigned tag, unsigned second_tag)
@@ -714,13 +712,14 @@ static void check_tag(MainLoopState const &mls, Asm::Assembler<WriterT> &a, Writ
     a.mov_reg_rm64(reg_2op(scratch_reg, x86reg));
     a.and_rm64_imm8(reg_1op(scratch_reg), (uint8_t)TAG_MASK);
     a.cmp_rm64_imm8(reg_1op(scratch_reg), (uint8_t)expected_tag_value);
-    a.je_st_rel8(0); // Going to fill this in in a minute.
-    std::size_t byte = w.size();
-    a.mov_reg_imm64(scratch_reg, mls.type_error_handler_asm->get_start_addr());
-    a.mov_reg_imm32(EAX, 0);
-    a.jmp_nr_rm64(reg_1op(scratch_reg));
-    std::size_t af = w.size();
-    w.set_at(byte - 1, (int8_t)(af - byte)); // Set single-byte relative jump offset.
+    debug_print_x86reg64(mls, a, x86reg, "RRRR: ");
+//    debug_print_x86reg64(mls, a, scratch_reg, "REGV: ");
+//    a.jne_st_rel8(0); // Going to fill this in in a minute.
+//    std::size_t byte = w.size();
+//    a.mov_reg_imm64(scratch_reg, mls.type_error_handler_asm->get_start_addr());
+//    a.jmp_nr_rm64(reg_1op(scratch_reg));
+//    std::size_t af = w.size();
+//    w.set_at(byte - 1, (int8_t)(af - byte)); // Set single-byte relative jump offset.
 }
 
 template <class WriterT>
@@ -732,7 +731,7 @@ static void emit_iadd(MainLoopState const &mls, Asm::Assembler<WriterT> &a, Writ
 
     // Check that the values are integers.
     check_tag(mls, a, w, RDX, TAG_INT, RSI/*scratch*/);
-    check_tag(mls, a, w, RBX, TAG_INT, RSI/*scratch*/);
+//    check_tag(mls, a, w, RBX, TAG_INT, RSI/*scratch*/);
 
     a.mov_reg_rm64(mem_2op(RAX, r1));
     a.add_reg_rm64(mem_2op(RAX, r2));
@@ -813,6 +812,7 @@ static void save_regs_before_c_funcall(MainLoopState const &mls, Asm::Assembler<
 //        if (true) {
             Register r = vm_regs_x86_regs[i];
             a.push_rm64(reg_1op(r));
+//            std::printf("SAVED %s\n", register_name(r));
         }
     }
 }
@@ -826,6 +826,7 @@ static void restore_regs_after_c_funcall(MainLoopState const &mls, Asm::Assemble
 //        if (true) {
             Register r = vm_regs_x86_regs[i];
             a.pop_rm64(reg_1op(r));
+//            std::printf("RESTORED %s\n", register_name(r));
         }
     }
 }
