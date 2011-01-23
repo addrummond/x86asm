@@ -444,6 +444,8 @@ public:
     // SSE(2) MOV* intructions.
     void movdqa_mm_mmm128(ModrmSib const &modrmsib);
     void movdqa_mmm128_mm(ModrmSib const &modrmsib);
+    void movdqu_mm_mmm128(ModrmSib const &modrmsib);
+    void movdqu_mmm128_mm(ModrmSib const &modrmsib);
     void movq_mm_mmm64(ModrmSib const &modrmsib);
     void movq_mmm64_mm(ModrmSib const &modrmsib);
 

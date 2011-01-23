@@ -1060,23 +1060,26 @@ INST(mov_reg_imm64, uint64_t, SIZE_64)
 //
 // SSE(2) MOV* instructions.
 //
-template <class WriterT, uint8_t FINAL_OPCODE_BYTE>
+template <class WriterT, uint8_t FIRST_OPCODE_BYTE, uint8_t FINAL_OPCODE_BYTE>
 static void movdqa_(Assembler<WriterT> &a, WriterT &w, ModrmSib const &modrmsib)
 {
     assert(modrmsib.xmm_registers_only());
     DEBUG_STEPPING(a);
     ABIFNZ(compute_rex(modrmsib, SIZE_128));
-    AZ("\x66\x0f");
+    AB(FIRST_OPCODE_BYTE);
+    AB(0x0F);
     AB(FINAL_OPCODE_BYTE);
     write_modrmsib_disp(w, modrmsib);
 }
 
-#define INST(name, final_opcode_byte) \
+#define INST(name, first_opcode_byte, final_opcode_byte)     \
     template <class WriterT> void Asm::Assembler<WriterT>:: \
     name (ModrmSib const &modrmsib) \
-    { movdqa_<WriterT, final_opcode_byte>(*this, w, modrmsib); }
-INST(movdqa_mm_mmm128, 0x6f)
-INST(movdqa_mmm128_mm, 0x7F)
+    { movdqa_<WriterT, first_opcode_byte, final_opcode_byte>(*this, w, modrmsib); }
+INST(movdqa_mm_mmm128, 0x66, 0x6F)
+INST(movdqa_mmm128_mm, 0x66, 0x7F)
+INST(movdqu_mm_mmm128, 0xF3, 0x6F)
+INST(movdqu_mmm128_mm, 0xF3, 0x7F)
 #undef INST
 
 template <class WriterT, uint8_t FINAL_OPCODE_BYTE>
@@ -1246,10 +1249,10 @@ void Asm::Assembler<WriterT>::emit_step_point()
     }
     // Push all XMM registers.
     mov_reg_rm64(reg_2op(RCX, RSP)); // Can't use RSP as base reg owing to weird x86 instruction encoding.
-    for (int i = XMM0; i < XMM15; ++i) {
-        movdqa_mmm128_mm(mem_2op(static_cast<Register>(i)/*reg*/, RCX/*base*/, NOT_A_REGISTER/*index*/, SCALE_1, (i-XMM0+1)*-16));
+    sub_rm64_imm32(reg_1op(RSP), 16*16);
+    for (int i = XMM0; i <= XMM15; ++i) {
+        movdqu_mmm128_mm(mem_2op(static_cast<Register>(i)/*reg*/, RCX/*base*/, NOT_A_REGISTER/*index*/, SCALE_1, (i-XMM0+1)*-16));
     }
-    sub_rm32_imm32(reg_1op(RSP), 16*16);
     // Save flags register.
     pushf();
 
@@ -1270,11 +1273,11 @@ void Asm::Assembler<WriterT>::emit_step_point()
 
     // Restore saved registers.
     popf();
-    mov_reg_rm64(reg_2op(RCX, RSP)); // Can't use RSP as base reg owing to weird x86 instruction encoding.
+    mov_reg_rm64(reg_2op(RCX, RSP)); // Can't use RSP as base reg owing to weird x86 instruction encoding.    
     for (int i = XMM15; i >= XMM0; --i) {
-        movdqa_mm_mmm128(mem_2op(static_cast<Register>(i)/*reg*/, RCX/*base*/, NOT_A_REGISTER/*index*/, SCALE_1, (XMM15-i+1)*-16));
+        movdqu_mm_mmm128(mem_2op(static_cast<Register>(i)/*reg*/, RCX/*base*/, NOT_A_REGISTER/*index*/, SCALE_1, (XMM15-i)*16));
     }
-    add_rm32_imm32(reg_1op(RSP), 16*16);
+    add_rm64_imm32(reg_1op(RSP), 16*16);
     for (int i = R15; i >= RAX; --i) {
         pop_rm64(reg_1op(static_cast<Register>(i)));
     }
