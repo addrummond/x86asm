@@ -104,6 +104,7 @@ void test2()
     a.ret();
 
     w.debug_print();
+    w.get_exec_func()();
 
     std::printf("TEST 2: val = 0x%llx\n", val);
     assert(val == 1);
