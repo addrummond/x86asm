@@ -435,7 +435,8 @@ template Disp<int32_t> Asm::mkdisp<int32_t>(int32_t i, DispOp op);
         udis86::ud_set_syntax(&ud, udis86::UD_SYN_INTEL); \
         udis86::ud_disassemble(&ud); \
         a_.stop_debug_stepping(); \
-        std::string *s = new std::string(udis86::ud_insn_asm(&ud)); \
+        std::string *s = new std::string("JUST EXECUTED: "); \
+        s->append(udis86::ud_insn_asm(&ud)); \
         a_.emit_debug_print(s->c_str()); \
         a_.start_debug_stepping(); \
     } while (0)
