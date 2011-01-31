@@ -1315,14 +1315,6 @@ void Asm::Assembler<WriterT>::ret()
 #undef REX_W_S
 
 #ifdef DEBUG
-struct ProcessorState {
-    uint64_t flags;
-    uint64_t gp_regs[16];
-    uint64_t xmm_regs[32];
-};
-
-static ProcessorState global_savedProcessorState;
-
 template <class WriterT>
 void Asm::Assembler<WriterT>::emit_save_all_regs()
 {
