@@ -570,7 +570,7 @@ INST(xor_rm64_imm32, SIZE_64, uint32_t, SIZE_32, 0x81, 0x81, ESI/*6*/)
 //
 
 template <class WriterT>
-void Asm::Assembler<WriterT>::call_rel32(Disp<int32_t> disp)
+void Asm::Assembler<WriterT>::call_rel32(Disp<int32_t> const &disp)
 {
     DEBUG_STEPPING(*this);
     AB(0xE8);
@@ -960,9 +960,9 @@ void Asm::Assembler<WriterT>::inc_reg64(Register reg) { inc_rm64(reg_1op(reg)); 
 
 // Short and near jumps.
 template <class WriterT, uint8_t OPCODE_PREFIX, uint8_t OPCODE, class DispT, DispSize DISP_SIZE>
-static void XX_XX_rel_(Assembler<WriterT> &a, WriterT &w, DispT disp, BranchHint hint)
+static DispSetter<typename DispT::IntType> XX_XX_rel_(Assembler<WriterT> &a, WriterT &w, DispT const &disp, BranchHint hint)
 {
-    DEBUG_STEPPING(a);
+//    DEBUG_STEPPING(a);
     std::size_t instruction_size = 1 + DISP_SIZE;
 
     if (hint == BRANCH_HINT_TAKEN) {
@@ -980,19 +980,22 @@ static void XX_XX_rel_(Assembler<WriterT> &a, WriterT &w, DispT disp, BranchHint
     }
 
     AB(OPCODE);
+    std::size_t disp_position = w.size();
     typename DispT::IntType d = disp.get(instruction_size);
     w.a(reinterpret_cast<uint8_t *>(&d), DISP_SIZE);
 
-    DEBUG_PRINT_INSTR(a, w);
+//    DEBUG_PRINT_INSTR(a, w);
+
+    return DispSetter<typename DispT::IntType>(disp, instruction_size, w.get_mem() + disp_position);
 }
 #define INST(prefix, opcode) \
-    template <class WriterT> void Asm::Assembler<WriterT>:: \
-    prefix ## _st_rel8 (Disp<int8_t> disp, BranchHint hint) \
+    template <class WriterT> DispSetter<int8_t> Asm::Assembler<WriterT>:: \
+    prefix ## _st_rel8 (Disp<int8_t> const &disp, BranchHint hint) \
     { XX_XX_rel_<WriterT, 0, opcode, Disp<int8_t>, DISP_SIZE_8>(*this, w, disp, hint); }
 #define INST2(prefix, opcode) \
     INST(prefix, opcode) \
-    template <class WriterT> void Asm::Assembler<WriterT>:: \
-    prefix ## _nr_rel32 (Disp<int32_t> disp, BranchHint hint) \
+    template <class WriterT> DispSetter<int32_t> Asm::Assembler<WriterT>:: \
+    prefix ## _nr_rel32 (Disp<int32_t> const &disp, BranchHint hint) \
     { XX_XX_rel_<WriterT, 0x0F, opcode + 0x10, Disp<int32_t>, DISP_SIZE_32 >(*this, w, disp, hint); }
 INST2(ja, 0x77) INST2(jbe, 0x76) INST2(jc, 0x72)
 INST2(jg, 0x7F) INST2(jge, 0x7D) INST2(jl, 0x7C)
@@ -1009,20 +1012,22 @@ INST2(js, 0x78) INST2(jz, 0x74)
 //
 
 template <class WriterT, class IntT, Size IntTSize>
-static void jmp_nr_relXX_(Assembler<WriterT> &a, WriterT &w, Disp<IntT> disp, BranchHint hint)
+static DispSetter<IntT> jmp_nr_relXX_(Assembler<WriterT> &a, WriterT &w, Disp<IntT> const &disp, BranchHint hint)
 {
     COMPILE_ASSERT(IntTSize == 4 || IntTSize == 1);
-    DEBUG_STEPPING(a);
+//    DEBUG_STEPPING(a);
     AB(IntTSize == SIZE_8 ? 0xEB : 0xE9);
+    std::size_t disp_position = w.size();
     IntT d = disp.get(1 + IntTSize);
     w.a(reinterpret_cast<uint8_t *>(&d), IntTSize);
-    DEBUG_PRINT_INSTR(a, w);
+//    DEBUG_PRINT_INSTR(a, w);
+    return DispSetter<IntT>(disp, 1 + IntTSize, w.get_mem() + disp_position);
 }
 
 #define INST(name, int_t, int_t_size) \
-    template <class WriterT> void Asm::Assembler<WriterT>:: \
-    name(Disp<int_t> disp, BranchHint hint)                                 \
-    { jmp_nr_relXX_<WriterT, int_t, int_t_size>(*this, w, disp, hint); }
+    template <class WriterT> DispSetter<int_t> Asm::Assembler<WriterT>:: \
+    name(Disp<int_t> const &disp, BranchHint hint) \
+    { return jmp_nr_relXX_<WriterT, int_t, int_t_size>(*this, w, disp, hint); }
 INST(jmp_nr_rel8, int8_t, SIZE_8)
 INST(jmp_nr_rel32, int32_t, SIZE_32)
 #undef INST
@@ -1031,12 +1036,12 @@ template <class WriterT>
 void Asm::Assembler<WriterT>::jmp_nr_rm64(ModrmSib const &modrmsib_, BranchHint hint)
 {
     assert(! modrmsib_.has_reg_operand());
-    DEBUG_STEPPING(*this);
+//    DEBUG_STEPPING(*this);
     ModrmSib modrmsib = modrmsib_;
     modrmsib.reg = ESP/*4*/;
     AB(0xFF);
     write_modrmsib_disp(w, modrmsib);
-    DEBUG_PRINT_INSTR(*this, w);
+//    DEBUG_PRINT_INSTR(*this, w);
 }
 
 //
