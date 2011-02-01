@@ -20,7 +20,7 @@ asm_test.o: asm.o asm_test.cc mremap.o
 	$(INVOKECXX) -c asm_test.cc -o asm_test.o
 
 asm_test: asm_test.o
-	$(INVOKECXX) asm.o mremap.o asm_test.o util.o -o asm_test
+	$(INVOKECXX) $(LDFLAGS) asm.o mremap.o asm_test.o util.o -o asm_test
 
 mem.o: mem.cc mem.hh asm.o mremap.o
 	$(INVOKECXX) -c mem.cc -o mem.o
@@ -32,7 +32,7 @@ vm_test.o: vm.o vm_test.cc util.o
 	$(INVOKECXX) -c vm_test.cc -o vm_test.o
 
 vm_test: vm_test.o
-	$(INVOKECXX) vm.o util.o asm.o mremap.o mem.o vm_test.o -o vm_test
+	$(INVOKECXX) $(LDFLAGS) vm.o util.o asm.o mremap.o mem.o vm_test.o -o vm_test
 
 clean:
 	rm *_test ; rm *.o
