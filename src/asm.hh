@@ -169,21 +169,19 @@ private:
 template <class IntT>
 Disp<IntT> mkdisp(IntT i, DispOp op = DISP_NO_OP);
 
-template <class IntT>
+template <class WriterT, class IntT>
 class DispSetter {
 public:
-    DispSetter(Disp<IntT> const &disp_, std::size_t isize_, uint8_t *start_)
-        : disp(disp_), isize(isize_), start(start_) { }
+    DispSetter(WriterT &w_, std::size_t isize_, std::size_t disp_position_)
+        : w(w_), isize(isize_), disp_position(disp_position_) { }
 
-    void set(Disp<IntT> const &d) { *(reinterpret_cast<IntT *>(start)) = d.get(isize); }
+    void set(Disp<IntT> const &d) { w.set_at(disp_position, d.get(isize)); }
 
 private:
-    Disp<IntT> const &disp;
+    WriterT &w;
     std::size_t isize;
-    uint8_t *start;
+    std::size_t disp_position;
 };
-typedef DispSetter<int8_t> StDispSetter;
-typedef DispSetter<int32_t> NrDispSetter;
 
 #ifdef DEBUG
 extern bool DEBUG_STEP_BY_DEFAULT;
@@ -197,6 +195,9 @@ public:
     ,last_instruction_offset(0)                               
 #endif
    { }
+
+    typedef DispSetter<WriterT, int8_t> StDispSetter;
+    typedef DispSetter<WriterT, int32_t> NrDispSetter;
 
     // ADC
     void adc_rm32_reg(ModrmSib const &modrmsib);
@@ -369,74 +370,74 @@ public:
     // JP,JPE            JPE
     // JNP,JPO           JPO
     // JCXZ,JECXZ,JRCXZ  JRCXZ
-    DispSetter<int8_t> ja_st_rel8(Disp<int8_t> const &disp, BranchHint hint=BRANCH_HINT_NONE);
-    DispSetter<int8_t> jc_st_rel8(Disp<int8_t> const &disp, BranchHint hint=BRANCH_HINT_NONE);
-    DispSetter<int8_t> jg_st_rel8(Disp<int8_t> const &disp, BranchHint hint=BRANCH_HINT_NONE);
-    DispSetter<int8_t> jge_st_rel8(Disp<int8_t> const &disp, BranchHint hint=BRANCH_HINT_NONE);
-    DispSetter<int8_t> jl_st_rel8(Disp<int8_t> const &disp, BranchHint hint=BRANCH_HINT_NONE);
-    DispSetter<int8_t> jle_st_rel8(Disp<int8_t> const &disp, BranchHint hint=BRANCH_HINT_NONE);
-    DispSetter<int8_t> jbe_st_rel8(Disp<int8_t> const &disp, BranchHint hint=BRANCH_HINT_NONE);
-    DispSetter<int8_t> jnc_st_rel8(Disp<int8_t> const &disp, BranchHint hint=BRANCH_HINT_NONE);
-    DispSetter<int8_t> jno_st_rel8(Disp<int8_t> const &disp, BranchHint hint=BRANCH_HINT_NONE);
-    DispSetter<int8_t> jns_st_rel8(Disp<int8_t> const &disp, BranchHint hint=BRANCH_HINT_NONE);
-    DispSetter<int8_t> jnz_st_rel8(Disp<int8_t> const &disp, BranchHint hint=BRANCH_HINT_NONE);
-    DispSetter<int8_t> jo_st_rel8(Disp<int8_t> const &disp, BranchHint hint=BRANCH_HINT_NONE);
-    DispSetter<int8_t> jpe_st_rel8(Disp<int8_t> const &disp, BranchHint hint=BRANCH_HINT_NONE);
-    DispSetter<int8_t> jpo_st_rel8(Disp<int8_t> const &disp, BranchHint hint=BRANCH_HINT_NONE);
-    DispSetter<int8_t> jrcxz_st_rel8(Disp<int8_t> const &disp, BranchHint hint=BRANCH_HINT_NONE);
-    DispSetter<int8_t> js_st_rel8(Disp<int8_t> const &disp, BranchHint hint=BRANCH_HINT_NONE);
-    DispSetter<int8_t> jz_st_rel8(Disp<int8_t> const &disp, BranchHint hint=BRANCH_HINT_NONE);
-    DispSetter<int32_t> ja_nr_rel32(Disp<int32_t> const &disp, BranchHint hint=BRANCH_HINT_NONE);
-    DispSetter<int32_t> jc_nr_rel32(Disp<int32_t> const &disp, BranchHint hint=BRANCH_HINT_NONE);
-    DispSetter<int32_t> jg_nr_rel32(Disp<int32_t> const &disp, BranchHint hint=BRANCH_HINT_NONE);
-    DispSetter<int32_t> jge_nr_rel32(Disp<int32_t> const &disp, BranchHint hint=BRANCH_HINT_NONE);
-    DispSetter<int32_t> jl_nr_rel32(Disp<int32_t> const &disp, BranchHint hint=BRANCH_HINT_NONE);
-    DispSetter<int32_t> jle_nr_rel32(Disp<int32_t> const &disp, BranchHint hint=BRANCH_HINT_NONE);
-    DispSetter<int32_t> jbe_nr_rel32(Disp<int32_t> const &disp, BranchHint hint=BRANCH_HINT_NONE);
-    DispSetter<int32_t> jnc_nr_rel32(Disp<int32_t> const &disp, BranchHint hint=BRANCH_HINT_NONE);
-    DispSetter<int32_t> jno_nr_rel32(Disp<int32_t> const &disp, BranchHint hint=BRANCH_HINT_NONE);
-    DispSetter<int32_t> jns_nr_rel32(Disp<int32_t> const &disp, BranchHint hint=BRANCH_HINT_NONE);
-    DispSetter<int32_t> jnz_nr_rel32(Disp<int32_t> const &disp, BranchHint hint=BRANCH_HINT_NONE);
-    DispSetter<int32_t> jo_nr_rel32(Disp<int32_t> const &disp, BranchHint hint=BRANCH_HINT_NONE);
-    DispSetter<int32_t> jpe_nr_rel32(Disp<int32_t> const &disp, BranchHint hint=BRANCH_HINT_NONE);
-    DispSetter<int32_t> jpo_nr_rel32(Disp<int32_t> const &disp, BranchHint hint=BRANCH_HINT_NONE);
-    DispSetter<int32_t> js_nr_rel32(Disp<int32_t> const &disp, BranchHint hint=BRANCH_HINT_NONE);
-    DispSetter<int32_t> jz_nr_rel32(Disp<int32_t> const &disp, BranchHint hint=BRANCH_HINT_NONE);
+    StDispSetter ja_st_rel8(Disp<int8_t> const &disp, BranchHint hint=BRANCH_HINT_NONE);
+    StDispSetter jc_st_rel8(Disp<int8_t> const &disp, BranchHint hint=BRANCH_HINT_NONE);
+    StDispSetter jg_st_rel8(Disp<int8_t> const &disp, BranchHint hint=BRANCH_HINT_NONE);
+    StDispSetter jge_st_rel8(Disp<int8_t> const &disp, BranchHint hint=BRANCH_HINT_NONE);
+    StDispSetter jl_st_rel8(Disp<int8_t> const &disp, BranchHint hint=BRANCH_HINT_NONE);
+    StDispSetter jle_st_rel8(Disp<int8_t> const &disp, BranchHint hint=BRANCH_HINT_NONE);
+    StDispSetter jbe_st_rel8(Disp<int8_t> const &disp, BranchHint hint=BRANCH_HINT_NONE);
+    StDispSetter jnc_st_rel8(Disp<int8_t> const &disp, BranchHint hint=BRANCH_HINT_NONE);
+    StDispSetter jno_st_rel8(Disp<int8_t> const &disp, BranchHint hint=BRANCH_HINT_NONE);
+    StDispSetter jns_st_rel8(Disp<int8_t> const &disp, BranchHint hint=BRANCH_HINT_NONE);
+    StDispSetter jnz_st_rel8(Disp<int8_t> const &disp, BranchHint hint=BRANCH_HINT_NONE);
+    StDispSetter jo_st_rel8(Disp<int8_t> const &disp, BranchHint hint=BRANCH_HINT_NONE);
+    StDispSetter jpe_st_rel8(Disp<int8_t> const &disp, BranchHint hint=BRANCH_HINT_NONE);
+    StDispSetter jpo_st_rel8(Disp<int8_t> const &disp, BranchHint hint=BRANCH_HINT_NONE);
+    StDispSetter jrcxz_st_rel8(Disp<int8_t> const &disp, BranchHint hint=BRANCH_HINT_NONE);
+    StDispSetter js_st_rel8(Disp<int8_t> const &disp, BranchHint hint=BRANCH_HINT_NONE);
+    StDispSetter jz_st_rel8(Disp<int8_t> const &disp, BranchHint hint=BRANCH_HINT_NONE);
+    NrDispSetter ja_nr_rel32(Disp<int32_t> const &disp, BranchHint hint=BRANCH_HINT_NONE);
+    NrDispSetter jc_nr_rel32(Disp<int32_t> const &disp, BranchHint hint=BRANCH_HINT_NONE);
+    NrDispSetter jg_nr_rel32(Disp<int32_t> const &disp, BranchHint hint=BRANCH_HINT_NONE);
+    NrDispSetter jge_nr_rel32(Disp<int32_t> const &disp, BranchHint hint=BRANCH_HINT_NONE);
+    NrDispSetter jl_nr_rel32(Disp<int32_t> const &disp, BranchHint hint=BRANCH_HINT_NONE);
+    NrDispSetter jle_nr_rel32(Disp<int32_t> const &disp, BranchHint hint=BRANCH_HINT_NONE);
+    NrDispSetter jbe_nr_rel32(Disp<int32_t> const &disp, BranchHint hint=BRANCH_HINT_NONE);
+    NrDispSetter jnc_nr_rel32(Disp<int32_t> const &disp, BranchHint hint=BRANCH_HINT_NONE);
+    NrDispSetter jno_nr_rel32(Disp<int32_t> const &disp, BranchHint hint=BRANCH_HINT_NONE);
+    NrDispSetter jns_nr_rel32(Disp<int32_t> const &disp, BranchHint hint=BRANCH_HINT_NONE);
+    NrDispSetter jnz_nr_rel32(Disp<int32_t> const &disp, BranchHint hint=BRANCH_HINT_NONE);
+    NrDispSetter jo_nr_rel32(Disp<int32_t> const &disp, BranchHint hint=BRANCH_HINT_NONE);
+    NrDispSetter jpe_nr_rel32(Disp<int32_t> const &disp, BranchHint hint=BRANCH_HINT_NONE);
+    NrDispSetter jpo_nr_rel32(Disp<int32_t> const &disp, BranchHint hint=BRANCH_HINT_NONE);
+    NrDispSetter js_nr_rel32(Disp<int32_t> const &disp, BranchHint hint=BRANCH_HINT_NONE);
+    NrDispSetter jz_nr_rel32(Disp<int32_t> const &disp, BranchHint hint=BRANCH_HINT_NONE);
     // Inline definitions for synonyms.
-    DispSetter<int8_t> je_st_rel8(Disp<int8_t> const & disp, BranchHint hint=BRANCH_HINT_NONE) { jz_st_rel8(disp, hint); }
-    DispSetter<int8_t> jne_st_rel8(Disp<int8_t> const &disp, BranchHint hint=BRANCH_HINT_NONE) { jnz_st_rel8(disp, hint); }
-    DispSetter<int8_t> jb_st_rel8(Disp<int8_t> const &disp, BranchHint hint=BRANCH_HINT_NONE) { jc_st_rel8(disp, hint); }
-    DispSetter<int8_t> jnae_st_rel8(Disp<int8_t> const &disp, BranchHint hint=BRANCH_HINT_NONE) { jc_st_rel8(disp, hint); }
-    DispSetter<int8_t> jnb_st_rel8(Disp<int8_t> const &disp, BranchHint hint=BRANCH_HINT_NONE) { jnc_st_rel8(disp, hint); }
-    DispSetter<int8_t> jae_st_rel8(Disp<int8_t> const &disp, BranchHint hint=BRANCH_HINT_NONE) { jnc_st_rel8(disp, hint); }
-    DispSetter<int8_t> jna_st_rel8(Disp<int8_t> const &disp, BranchHint hint=BRANCH_HINT_NONE) { jbe_st_rel8(disp, hint); }
-    DispSetter<int8_t> jnbe_st_rel8(Disp<int8_t> const &disp, BranchHint hint=BRANCH_HINT_NONE) { ja_st_rel8(disp, hint); }
-    DispSetter<int8_t> jnge_st_rel8(Disp<int8_t> const &disp, BranchHint hint=BRANCH_HINT_NONE) { jl_st_rel8(disp, hint); }
-    DispSetter<int8_t> jnl_st_rel8(Disp<int8_t> const &disp, BranchHint hint=BRANCH_HINT_NONE) { jge_st_rel8(disp, hint); }
-    DispSetter<int8_t> jng_st_rel8(Disp<int8_t> const &disp, BranchHint hint=BRANCH_HINT_NONE) { jle_st_rel8(disp, hint); }
-    DispSetter<int8_t> jnle_st_rel8(Disp<int8_t> const &disp, BranchHint hint=BRANCH_HINT_NONE) { jg_st_rel8(disp, hint); }
-    DispSetter<int8_t> jp_st_rel8(Disp<int8_t> const &disp, BranchHint hint=BRANCH_HINT_NONE) { jpe_st_rel8(disp, hint); }
-    DispSetter<int8_t> jnp_st_rel8(Disp<int8_t> const &disp, BranchHint hint=BRANCH_HINT_NONE) { jpo_st_rel8(disp, hint); }
-    DispSetter<int8_t> jcxz_st_rel8(Disp<int8_t> const &disp, BranchHint hint=BRANCH_HINT_NONE) { jrcxz_st_rel8(disp, hint); }
-    DispSetter<int8_t> jecxz_st_rel8(Disp<int8_t> const &disp, BranchHint hint=BRANCH_HINT_NONE) { jrcxz_st_rel8(disp, hint); }
-    DispSetter<int32_t> je_nr_rel32(Disp<int32_t> const &disp, BranchHint hint=BRANCH_HINT_NONE) { jz_nr_rel32(disp, hint); }
-    DispSetter<int32_t> jne_nr_rel32(Disp<int32_t> const &disp, BranchHint hint=BRANCH_HINT_NONE) { jnz_nr_rel32(disp, hint); }
-    DispSetter<int32_t> jb_nr_rel32(Disp<int32_t> const &disp, BranchHint hint=BRANCH_HINT_NONE) { jc_nr_rel32(disp, hint); }
-    DispSetter<int32_t> jnae_nr_rel32(Disp<int32_t> const &disp, BranchHint hint=BRANCH_HINT_NONE) { jc_nr_rel32(disp, hint); }
-    DispSetter<int32_t> jnb_nr_rel32(Disp<int32_t> const &disp, BranchHint hint=BRANCH_HINT_NONE) { jnc_nr_rel32(disp, hint); }
-    DispSetter<int32_t> jae_nr_rel32(Disp<int32_t> const &disp, BranchHint hint=BRANCH_HINT_NONE) { jnc_nr_rel32(disp, hint); }
-    DispSetter<int32_t> jna_nr_rel32(Disp<int32_t> const &disp, BranchHint hint=BRANCH_HINT_NONE) { jbe_nr_rel32(disp, hint); }
-    DispSetter<int32_t> jnbe_nr_rel32(Disp<int32_t> const &disp, BranchHint hint=BRANCH_HINT_NONE) { ja_nr_rel32(disp, hint); }
-    DispSetter<int32_t> jnge_nr_rel32(Disp<int32_t> const &disp, BranchHint hint=BRANCH_HINT_NONE) { jl_nr_rel32(disp, hint); }
-    DispSetter<int32_t> jnl_nr_rel32(Disp<int32_t> const &disp, BranchHint hint=BRANCH_HINT_NONE) { jge_nr_rel32(disp, hint); }
-    DispSetter<int32_t> jng_nr_rel32(Disp<int32_t> const &disp, BranchHint hint=BRANCH_HINT_NONE) { jle_nr_rel32(disp, hint); }
-    DispSetter<int32_t> jnle_nr_rel32(Disp<int32_t> const &disp, BranchHint hint=BRANCH_HINT_NONE) { jg_nr_rel32(disp, hint); }
-    DispSetter<int32_t> jp_nr_rel32(Disp<int32_t> const &disp, BranchHint hint=BRANCH_HINT_NONE) { jpe_nr_rel32(disp, hint); }
-    DispSetter<int32_t> jnp_nr_rel32(Disp<int32_t> const &disp, BranchHint hint=BRANCH_HINT_NONE) { jpo_nr_rel32(disp, hint); }
+    StDispSetter je_st_rel8(Disp<int8_t> const & disp, BranchHint hint=BRANCH_HINT_NONE) { jz_st_rel8(disp, hint); }
+    StDispSetter jne_st_rel8(Disp<int8_t> const &disp, BranchHint hint=BRANCH_HINT_NONE) { jnz_st_rel8(disp, hint); }
+    StDispSetter jb_st_rel8(Disp<int8_t> const &disp, BranchHint hint=BRANCH_HINT_NONE) { jc_st_rel8(disp, hint); }
+    StDispSetter jnae_st_rel8(Disp<int8_t> const &disp, BranchHint hint=BRANCH_HINT_NONE) { jc_st_rel8(disp, hint); }
+    StDispSetter jnb_st_rel8(Disp<int8_t> const &disp, BranchHint hint=BRANCH_HINT_NONE) { jnc_st_rel8(disp, hint); }
+    StDispSetter jae_st_rel8(Disp<int8_t> const &disp, BranchHint hint=BRANCH_HINT_NONE) { jnc_st_rel8(disp, hint); }
+    StDispSetter jna_st_rel8(Disp<int8_t> const &disp, BranchHint hint=BRANCH_HINT_NONE) { jbe_st_rel8(disp, hint); }
+    StDispSetter jnbe_st_rel8(Disp<int8_t> const &disp, BranchHint hint=BRANCH_HINT_NONE) { ja_st_rel8(disp, hint); }
+    StDispSetter jnge_st_rel8(Disp<int8_t> const &disp, BranchHint hint=BRANCH_HINT_NONE) { jl_st_rel8(disp, hint); }
+    StDispSetter jnl_st_rel8(Disp<int8_t> const &disp, BranchHint hint=BRANCH_HINT_NONE) { jge_st_rel8(disp, hint); }
+    StDispSetter jng_st_rel8(Disp<int8_t> const &disp, BranchHint hint=BRANCH_HINT_NONE) { jle_st_rel8(disp, hint); }
+    StDispSetter jnle_st_rel8(Disp<int8_t> const &disp, BranchHint hint=BRANCH_HINT_NONE) { jg_st_rel8(disp, hint); }
+    StDispSetter jp_st_rel8(Disp<int8_t> const &disp, BranchHint hint=BRANCH_HINT_NONE) { jpe_st_rel8(disp, hint); }
+    StDispSetter jnp_st_rel8(Disp<int8_t> const &disp, BranchHint hint=BRANCH_HINT_NONE) { jpo_st_rel8(disp, hint); }
+    StDispSetter jcxz_st_rel8(Disp<int8_t> const &disp, BranchHint hint=BRANCH_HINT_NONE) { jrcxz_st_rel8(disp, hint); }
+    StDispSetter jecxz_st_rel8(Disp<int8_t> const &disp, BranchHint hint=BRANCH_HINT_NONE) { jrcxz_st_rel8(disp, hint); }
+    NrDispSetter je_nr_rel32(Disp<int32_t> const &disp, BranchHint hint=BRANCH_HINT_NONE) { jz_nr_rel32(disp, hint); }
+    NrDispSetter jne_nr_rel32(Disp<int32_t> const &disp, BranchHint hint=BRANCH_HINT_NONE) { jnz_nr_rel32(disp, hint); }
+    NrDispSetter jb_nr_rel32(Disp<int32_t> const &disp, BranchHint hint=BRANCH_HINT_NONE) { jc_nr_rel32(disp, hint); }
+    NrDispSetter jnae_nr_rel32(Disp<int32_t> const &disp, BranchHint hint=BRANCH_HINT_NONE) { jc_nr_rel32(disp, hint); }
+    NrDispSetter jnb_nr_rel32(Disp<int32_t> const &disp, BranchHint hint=BRANCH_HINT_NONE) { jnc_nr_rel32(disp, hint); }
+    NrDispSetter jae_nr_rel32(Disp<int32_t> const &disp, BranchHint hint=BRANCH_HINT_NONE) { jnc_nr_rel32(disp, hint); }
+    NrDispSetter jna_nr_rel32(Disp<int32_t> const &disp, BranchHint hint=BRANCH_HINT_NONE) { jbe_nr_rel32(disp, hint); }
+    NrDispSetter jnbe_nr_rel32(Disp<int32_t> const &disp, BranchHint hint=BRANCH_HINT_NONE) { ja_nr_rel32(disp, hint); }
+    NrDispSetter jnge_nr_rel32(Disp<int32_t> const &disp, BranchHint hint=BRANCH_HINT_NONE) { jl_nr_rel32(disp, hint); }
+    NrDispSetter jnl_nr_rel32(Disp<int32_t> const &disp, BranchHint hint=BRANCH_HINT_NONE) { jge_nr_rel32(disp, hint); }
+    NrDispSetter jng_nr_rel32(Disp<int32_t> const &disp, BranchHint hint=BRANCH_HINT_NONE) { jle_nr_rel32(disp, hint); }
+    NrDispSetter jnle_nr_rel32(Disp<int32_t> const &disp, BranchHint hint=BRANCH_HINT_NONE) { jg_nr_rel32(disp, hint); }
+    NrDispSetter jp_nr_rel32(Disp<int32_t> const &disp, BranchHint hint=BRANCH_HINT_NONE) { jpe_nr_rel32(disp, hint); }
+    NrDispSetter jnp_nr_rel32(Disp<int32_t> const &disp, BranchHint hint=BRANCH_HINT_NONE) { jpo_nr_rel32(disp, hint); }
 
     // JMP (these have branch hints just to give the same method signature as other JMPs).
-    DispSetter<int8_t> jmp_nr_rel8(Disp<int8_t> const &disp, BranchHint hint=BRANCH_HINT_NONE);
-    DispSetter<int32_t> jmp_nr_rel32(Disp<int32_t> const &disp, BranchHint hint=BRANCH_HINT_NONE);
+    StDispSetter jmp_nr_rel8(Disp<int8_t> const &disp, BranchHint hint=BRANCH_HINT_NONE);
+    NrDispSetter jmp_nr_rel32(Disp<int32_t> const &disp, BranchHint hint=BRANCH_HINT_NONE);
     void jmp_nr_rm64(ModrmSib const &modrmsib, BranchHint hint=BRANCH_HINT_NONE);
 
     // LEA
