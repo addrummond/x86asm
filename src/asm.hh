@@ -182,6 +182,8 @@ private:
     std::size_t isize;
     uint8_t *start;
 };
+typedef DispSetter<int8_t> StDispSetter;
+typedef DispSetter<int32_t> NrDispSetter;
 
 #ifdef DEBUG
 extern bool DEBUG_STEP_BY_DEFAULT;
