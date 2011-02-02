@@ -445,6 +445,32 @@ template Disp<int32_t> Asm::mkdisp<int32_t>(int32_t i, DispOp op);
 #endif
 #endif
 
+// Disp.
+template <class IntT>
+Asm::Disp<IntT>::Disp(IntT i_) : i(i_), op(DISP_NO_OP) { }
+template <class IntT>
+Asm::Disp<IntT>::Disp(IntT i_, DispOp op_) : i(i_), op(op_) { }
+template <class IntT>
+IntT Asm::Disp<IntT>::get(std::size_t isize) const
+{
+    return (op == DISP_NO_OP ? i : (op == DISP_ADD_ISIZE ? i + isize : i - isize));
+}
+template class Disp<int8_t>;
+template class Disp<int32_t>;
+
+// DispSetter.
+template <class WriterT, class IntT>
+Asm::DispSetter<WriterT, IntT>::DispSetter(WriterT &w_, std::size_t isize_, std::size_t disp_position_)
+    : w(w_), isize(isize_), disp_position(disp_position_) { }
+template <class WriterT, class IntT>
+void Asm::DispSetter<WriterT, IntT>::set(Disp<IntT> const &d)
+{
+    w.set_at(disp_position, d.get(isize));
+}
+template class DispSetter<VectorWriter, int8_t>;
+template class DispSetter<VectorWriter, int32_t>;
+
+
 //
 // <<<<<<<<<< START OF INSTRUCTIONS <<<<<<<<<<
 //
@@ -991,12 +1017,12 @@ static DispSetter<WriterT, typename DispT::IntType> XX_XX_rel_(Assembler<WriterT
 #define INST(prefix, opcode) \
     template <class WriterT> DispSetter<WriterT, int8_t> Asm::Assembler<WriterT>:: \
     prefix ## _st_rel8 (Disp<int8_t> const &disp, BranchHint hint) \
-    { XX_XX_rel_<WriterT, 0, opcode, Disp<int8_t>, DISP_SIZE_8>(*this, w, disp, hint); }
+    { return XX_XX_rel_<WriterT, 0, opcode, Disp<int8_t>, DISP_SIZE_8>(*this, w, disp, hint); }
 #define INST2(prefix, opcode) \
     INST(prefix, opcode) \
     template <class WriterT> DispSetter<WriterT, int32_t> Asm::Assembler<WriterT>:: \
     prefix ## _nr_rel32 (Disp<int32_t> const &disp, BranchHint hint) \
-    { XX_XX_rel_<WriterT, 0x0F, opcode + 0x10, Disp<int32_t>, DISP_SIZE_32 >(*this, w, disp, hint); }
+    { return XX_XX_rel_<WriterT, 0x0F, opcode + 0x10, Disp<int32_t>, DISP_SIZE_32 >(*this, w, disp, hint); }
 INST2(ja, 0x77) INST2(jbe, 0x76) INST2(jc, 0x72)
 INST2(jg, 0x7F) INST2(jge, 0x7D) INST2(jl, 0x7C)
 INST2(jle, 0x7E) INST2(jnc, 0x73) INST2(jno, 0x71)
@@ -1473,7 +1499,7 @@ void Asm::VectorWriter::a(VectorWriter const &vw)
 template <class IntT>
 void Asm::VectorWriter::set_at(std::size_t index, IntT value)
 {
-    assert(index * sizeof(IntT) < (length - freebytes));
+    assert((index * sizeof(IntT)) + sizeof(IntT) <= (length - freebytes));
     reinterpret_cast<IntT *>(mem)[index] = value;
 }
 #define INST(t) \

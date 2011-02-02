@@ -157,10 +157,10 @@ class Disp {
 public:
     typedef IntT IntType;
 
-    Disp(IntT i_) : i(i_), op(DISP_NO_OP) { }
-    Disp(IntT i_, DispOp op_) : i(i_), op(op_) { }
+    Disp(IntT i_);
+    Disp(IntT i_, DispOp op_);
 
-    IntT get(std::size_t isize) const { return (op == DISP_NO_OP ? i : (op == DISP_ADD_ISIZE ? i + isize : i - isize)); }
+    IntT get(std::size_t isize) const;
 
 private:
     IntT i;
@@ -172,10 +172,9 @@ Disp<IntT> mkdisp(IntT i, DispOp op = DISP_NO_OP);
 template <class WriterT, class IntT>
 class DispSetter {
 public:
-    DispSetter(WriterT &w_, std::size_t isize_, std::size_t disp_position_)
-        : w(w_), isize(isize_), disp_position(disp_position_) { }
+    DispSetter(WriterT &w_, std::size_t isize_, std::size_t disp_position_);
 
-    void set(Disp<IntT> const &d) { w.set_at(disp_position, d.get(isize)); }
+    void set(Disp<IntT> const &d);
 
 private:
     WriterT &w;

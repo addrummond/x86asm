@@ -92,14 +92,11 @@ void test2()
 
     a.mov_reg_imm64(RAX, 1);
     a.cmp_rm64_imm8(reg_1op(RAX), 101);
-
-    VectorWriter w2;
-    VectorAssembler a2(w2);
-    a2.mov_reg_imm64(RAX, 2);
-
-    a.jnz_st_rel8(static_cast<int8_t>(w2.size()));
-    w.a(w2);
-
+    VectorAssembler::StDispSetter ds( a.jnz_st_rel8(0) );
+    std::size_t b4 = w.size();
+    a.mov_reg_imm64(RAX, 2);
+    std::size_t af = w.size();
+    ds.set(af - b4);
     a.mov_moffs64_rax(PTR(&val));
     a.ret();
 
@@ -436,7 +433,7 @@ void test10()
 
 int main()
 {
-    DEBUG_STEP_BY_DEFAULT = true;
+//    DEBUG_STEP_BY_DEFAULT = true;
 
     test1();
     test2();
