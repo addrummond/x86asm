@@ -105,12 +105,7 @@ bool Asm::reg_is_forbidden_in_rm(Register reg)
     return reg == ESP || reg == RSP || reg == R12 || reg == MM5 || reg == XMM5;
 }
 
-struct RawModrmSib {
-    uint8_t modrm;
-    uint8_t sib; // Set to 0 if none, since 0 is not a valid SIB.
-    bool has_disp;
-};
-static RawModrmSib raw_modrmsib(ModrmSib const &modrmsib)
+RawModrmSib Asm::raw_modrmsib(ModrmSib const &modrmsib)
 {
     RawModrmSib r;
     r.has_disp = true;
@@ -120,13 +115,11 @@ static RawModrmSib raw_modrmsib(ModrmSib const &modrmsib)
 
     // The special case of RIP.
     if (modrmsib.rip) {
-        assert((modrmsib.disp_size == DISP_SIZE_32 || modrmsib.disp_size == DISP_SIZE_NONE) &&
-               modrmsib.rm_reg != ESP && modrmsib.rm_reg != EBP &&
+        assert(modrmsib.disp_size == DISP_SIZE_32 &&
+               modrmsib.rm_reg == NOT_A_REGISTER &&
                modrmsib.scale == SCALE_1 &&
                modrmsib.base_reg == NOT_A_REGISTER);
-        r.modrm = raw_modrm(0,
-                            modrmsib.rm_reg != NOT_A_REGISTER ? register_code(modrmsib.rm_reg) : 5,
-                            modrmsib.reg != NOT_A_REGISTER ? register_code(modrmsib.reg) : 0);
+        r.modrm = raw_modrm(0, 5, modrmsib.reg != NOT_A_REGISTER ? register_code(modrmsib.reg) : 0);
         r.sib = 0;
         r.has_disp = modrmsib.disp_size != DISP_SIZE_NONE;
         return r;
@@ -298,13 +291,13 @@ ModrmSib reg_1op(Register rm)
 {
     return ModrmSib(false, rm);
 }
-ModrmSib rip_1op(Register reg1, int32_t disp)
+ModrmSib rip(int32_t disp)
 {
-    return ModrmSib(true, reg1, disp == 0 ? DISP_SIZE_NONE : DISP_SIZE_32, disp);
+    return rip_1op(NOT_A_REGISTER, disp);
 }
-ModrmSib rip_2op(Register reg2, Register reg1, int32_t disp)
+ModrmSib rip_1op(Register reg, int32_t disp)
 {
-    return ModrmSib(true, reg1, disp == 0 ? DISP_SIZE_NONE : DISP_SIZE_32, disp, reg2);
+    return ModrmSib(true, NOT_A_REGISTER, DISP_SIZE_32, disp, reg);
 }
 }
 

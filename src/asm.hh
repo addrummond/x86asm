@@ -119,8 +119,8 @@ ModrmSib mem_2op_short(Register reg, Register base=NOT_A_REGISTER, Register inde
 ModrmSib mem_1op_short(Register index=NOT_A_REGISTER, Scale scale=SCALE_1, int32_t displacement=0);
 ModrmSib reg_2op(Register reg, Register rm);
 ModrmSib reg_1op(Register rm);
-ModrmSib rip_1op(Register reg, int32_t offset=0);
-ModrmSib rip_2op(Register reg2, Register reg1, int32_t offset=0);
+ModrmSib rip(int32_t disp);
+ModrmSib rip_1op(Register reg, int32_t disp);
 
 bool reg_is_forbidden_in_rm(Register reg);
 
@@ -142,6 +142,13 @@ unsigned const NUMBER_OF_REGISTERS = 48;
 uint8_t register_code(Register reg);
 uint8_t register_rex(Register reg);
 unsigned register_byte_size(Register reg);
+
+struct RawModrmSib {
+    uint8_t modrm;
+    uint8_t sib; // Set to 0 if none, since 0 is not a valid SIB.
+    bool has_disp;
+};
+RawModrmSib raw_modrmsib(ModrmSib const &modrmsib);
 
 // This class is used to allow displacements to be expressed as a simple
 // function of the size of certain instructions. E.g., when writing a jump
