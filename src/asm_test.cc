@@ -90,14 +90,19 @@ void test2()
     // Set RAX to 1. Compare RAX with 101. Jump over an instruction
     // setting RAX to 2. Copy value of RAX into 'val'; should = 1.
 
+    a.push_reg64(RBP);
+    a.mov_reg_reg64(RBP, RSP);
+
     a.mov_reg_imm64(RAX, 1);
     a.cmp_rm64_imm8(reg_1op(RAX), 101);
-    VectorAssembler::StDispSetter ds( a.jnz_st_rel8(0) );
+    VectorAssembler::NrDispSetter ds( a.jnz_nr_rel32(0) );
     std::size_t b4 = w.size();
     a.mov_reg_imm64(RAX, 2);
     std::size_t af = w.size();
     ds.set(af - b4);
     a.mov_moffs64_rax(PTR(&val));
+
+    a.leave();
     a.ret();
 
     w.debug_print();
@@ -130,7 +135,7 @@ void test3()
     std::size_t s2 = w.size();
     // Using an explicitly constructed Disp<int8_t> to ensure that the size of the JL
     // instruction is subtracted from the (negative) jump offset.
-    a.jl_st_rel8(mkdisp(static_cast<int8_t>(s1-s2), DISP_SUB_ISIZE), BRANCH_HINT_TAKEN);
+    a.jl_nr_rel32(mkdisp(static_cast<int32_t>(s1-s2), DISP_SUB_ISIZE), BRANCH_HINT_TAKEN);
 
     // Move the value of RDX into val (not quite the simplest way, but good to
     // give MOV a bit of a workout).
@@ -183,7 +188,7 @@ void test4()
     std::size_t loop_end = w.size();
 
     // Loop if 'fval' is less than 100.
-    a.ja_st_rel8(mkdisp(static_cast<int8_t>(loop_start-loop_end), DISP_SUB_ISIZE), BRANCH_HINT_TAKEN);
+    a.ja_nr_rel32(mkdisp(static_cast<int32_t>(loop_start-loop_end), DISP_SUB_ISIZE), BRANCH_HINT_TAKEN);
 
     a.ret();
 
@@ -256,9 +261,14 @@ void test6()
     a.mov_reg_reg64(RBP, RSP);
 
     // TODO: Why does pushing RBP again cause a segfault?
-    a.call_rel32(mkdisp(2, DISP_ADD_ISIZE));
-    a.leave(); // 1 byte
-    a.ret();   // 1 byte
+    VectorAssembler::NrDispSetter ds ( a.call_rel32(0) );
+    std::size_t b4 = w.size();
+    std::printf("B4 %li\n", b4);
+    a.leave();
+    a.ret();
+    std::size_t af = w.size();
+    std::printf("AF %li\n", af);
+    ds.set(mkdisp<int32_t>(af - b4, DISP_ADD_ISIZE));
 //    a.push_reg64(RBP);
     a.mov_rm64_reg(reg_2op(RSP, RBP));
     a.sub_rm64_imm8(reg_1op(RBP), 2);
@@ -295,7 +305,7 @@ void test7()
     a.inc_rm64(mem_1op(RCX));
     a.cmp_rm64_imm8(mem_1op(RCX), 25);
     std::size_t af = w.size();
-    a.jl_st_rel8(mkdisp(static_cast<int8_t>(b4-af), DISP_SUB_ISIZE), BRANCH_HINT_TAKEN);
+    a.jl_nr_rel32(mkdisp(static_cast<int32_t>(b4-af), DISP_SUB_ISIZE), BRANCH_HINT_TAKEN);
     a.leave();
     a.ret();
 
@@ -375,6 +385,10 @@ after:
 //
 void test9()
 {
+    // Instruction encoding might not be the same when stepping is on.
+    if (DEBUG_STEP_BY_DEFAULT)
+        return;
+
     VectorWriter w;
     VectorAssembler a(w);
 
@@ -412,7 +426,7 @@ void test10()
     a.add_rm64_imm8(reg_1op(RAX), 16);
     a.cmp_rm64_imm32(reg_1op(RAX), sizeof(nonzero_dwords));
     std::size_t loop_end = w.size();
-    a.jl_st_rel8(mkdisp(static_cast<int8_t>(loop_start-loop_end), DISP_SUB_ISIZE));
+    a.jl_nr_rel32(mkdisp(static_cast<int32_t>(loop_start-loop_end), DISP_SUB_ISIZE));
     a.leave();
     a.ret();
 
@@ -438,6 +452,10 @@ void test10()
 //
 void test11()
 {
+    // Instruction encoding might not be the same when stepping is on.
+    if (DEBUG_STEP_BY_DEFAULT)
+        return;
+
 #define A_DISPLACEMENT 0x08
 #define MODEQ(modrmsib, val) \
     do { \
@@ -540,14 +558,14 @@ void test11()
 
 int main()
 {
-//    DEBUG_STEP_BY_DEFAULT = true;
+    DEBUG_STEP_BY_DEFAULT = true;
 
     test1();
     test2();
     test3();
     test4();
     test5();
-    test6();
+    test6(); // CURRENTLY BROKEN WITH DEBUG STEPPING ON.
     test7();
     test8();
     test9();
