@@ -465,6 +465,7 @@ Asm::DispSetter<WriterT, IntT>::DispSetter(WriterT &w_, std::size_t isize_, std:
 template <class WriterT, class IntT>
 void Asm::DispSetter<WriterT, IntT>::set(Disp<IntT> const &d)
 {
+    std::printf("DISP POS %li\n", disp_position);
     w.set_at(disp_position, d.get(isize));
 }
 template class DispSetter<VectorWriter, int8_t>;
@@ -596,12 +597,14 @@ INST(xor_rm64_imm32, SIZE_64, uint32_t, SIZE_32, 0x81, 0x81, ESI/*6*/)
 //
 
 template <class WriterT>
-void Asm::Assembler<WriterT>::call_rel32(Disp<int32_t> const &disp)
+typename Asm::Assembler<WriterT>::NrDispSetter Asm::Assembler<WriterT>::call_rel32(Disp<int32_t> const &disp)
 {
-    DEBUG_STEPPING(*this);
+//    DEBUG_STEPPING(*this);
     AB(0xE8);
+    std::size_t disp_position = w.size();
     A32(disp.get(5));
-    DEBUG_PRINT_INSTR(*this, w);
+//    DEBUG_PRINT_INSTR(*this, w);
+    return typename Asm::Assembler<WriterT>::NrDispSetter(w, 5, disp_position);
 }
 
 template <class WriterT>
@@ -1499,8 +1502,9 @@ void Asm::VectorWriter::a(VectorWriter const &vw)
 template <class IntT>
 void Asm::VectorWriter::set_at(std::size_t index, IntT value)
 {
-    assert((index * sizeof(IntT)) + sizeof(IntT) <= (length - freebytes));
-    reinterpret_cast<IntT *>(mem)[index] = value;
+//    std::printf("SIZE: [i]%li %li\n", index, length-freebytes);
+    assert(index + sizeof(IntT) <= (length - freebytes));
+    *reinterpret_cast<IntT *>(mem + index) = value;
 }
 #define INST(t) \
     template void Asm::VectorWriter::set_at<t>(std::size_t index, t value);

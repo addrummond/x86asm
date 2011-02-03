@@ -236,7 +236,7 @@ public:
     void and_rm64_imm32(ModrmSib const &modrmsib, uint32_t src);
 
     // CALL
-    void call_rel32(Disp<int32_t> const &disp);
+    NrDispSetter call_rel32(Disp<int32_t> const &disp);
     void call_rm64(ModrmSib modrmsib);
 
     // CMP
