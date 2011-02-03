@@ -382,7 +382,7 @@ void test9()
     w.debug_print();
     std::string hex;
     w.canonical_hex(hex);
-    std::printf("TEST 9\n\n");
+    std::printf("TEST 9: HEX: %s\n", hex.c_str());
     assert(hex == "49 8b 55 00");
     std::printf("* OK\n\n");
 }
@@ -431,6 +431,113 @@ void test10()
     std::printf("\nTEST 10\n* OK\n\n");
 }
 
+//
+// Intended to be an exhaustive test of modrm/sib byte encodings.
+// TODO: Make exhaustive (not yet complete, but still useful).
+// See table in Intel manual Vol 2A 2-7.
+//
+void test11()
+{
+#define A_DISPLACEMENT 0x08
+#define MODEQ(modrmsib, val) \
+    do { \
+        RawModrmSib raw = Asm::raw_modrmsib(modrmsib); \
+        std::printf("%s -- modrm:sib = 0x%.2x:%.2x\n", #modrmsib, raw.modrm, raw.sib); \
+        assert(raw.modrm == (val) && raw.sib == 0); \
+        std::printf("    (OK)\n"); \
+    } while (0)
+
+    MODEQ(rip_1op(RAX, A_DISPLACEMENT), 0x05);
+
+    //
+    // MOD = 00 (except exceptionally).
+    //
+
+    // RAX
+    MODEQ(mem_2op(RAX, RAX), 0x00);
+    MODEQ(mem_2op(RAX, RCX), 0x01);
+    MODEQ(mem_2op(RAX, RDX), 0x02);
+    MODEQ(mem_2op(RAX, RBX), 0x03);
+    // [ RSP gap ]
+    MODEQ(mem_2op(RAX, RBP), 0x45); // Can't use mod=00 when reg is EBP.
+    MODEQ(mem_2op(RAX, RSI), 0x06);
+    MODEQ(mem_2op(RAX, RDI), 0x07);
+
+    // RCX
+    MODEQ(mem_2op(RCX, RAX), 0x08);
+    MODEQ(mem_2op(RCX, RCX), 0x09);
+    MODEQ(mem_2op(RCX, RDX), 0x0A);
+    MODEQ(mem_2op(RCX, RBX), 0x0B);
+    // [ RSP gap ]
+    MODEQ(mem_2op(RCX, RBP), 0x4D); // Can't use mod=00 when reg is EBP.
+    MODEQ(mem_2op(RCX, RSI), 0x0E);
+    MODEQ(mem_2op(RCX, RDI), 0x0F);
+
+    // RDX
+    MODEQ(mem_2op(RDX, RAX), 0x10);
+    MODEQ(mem_2op(RDX, RCX), 0x11);
+    MODEQ(mem_2op(RDX, RDX), 0x12);
+    MODEQ(mem_2op(RDX, RBX), 0x13);
+    // [ RSP gap ]
+    MODEQ(mem_2op(RDX, RBP), 0x55); // Can't use mod=00 when reg is EBP.
+    MODEQ(mem_2op(RDX, RSI), 0x16);
+    MODEQ(mem_2op(RDX, RDI), 0x17);
+
+    // RBX
+    MODEQ(mem_2op(RBX, RAX), 0x18);
+    MODEQ(mem_2op(RBX, RCX), 0x19);
+    MODEQ(mem_2op(RBX, RDX), 0x1A);
+    MODEQ(mem_2op(RBX, RBX), 0x1B);
+    // [ RSP gap ]
+    MODEQ(mem_2op(RBX, RBP), 0x5D); // Can't use mod=00 when reg is EBP.
+    MODEQ(mem_2op(RBX, RSI), 0x1E);
+    MODEQ(mem_2op(RBX, RDI), 0x1F);
+
+    // RSP
+    MODEQ(mem_2op(RSP, RAX), 0x20);
+    MODEQ(mem_2op(RSP, RCX), 0x21);
+    MODEQ(mem_2op(RSP, RDX), 0x22);
+    MODEQ(mem_2op(RSP, RBX), 0x23);
+    // [ RSP gap ]
+    MODEQ(mem_2op(RSP, RBP), 0x65); // Can't use mod=00 when reg is EBP.
+    MODEQ(mem_2op(RSP, RSI), 0x26);
+    MODEQ(mem_2op(RSP, RDI), 0x27);
+
+    // RBP
+    MODEQ(mem_2op(RBP, RAX), 0x28);
+    MODEQ(mem_2op(RBP, RCX), 0x29);
+    MODEQ(mem_2op(RBP, RDX), 0x2A);
+    MODEQ(mem_2op(RBP, RBX), 0x2B);
+    // [ RSP gap ]
+    MODEQ(mem_2op(RBP, RBP), 0x6D); // Can't use mod=00 when reg is EBP.
+    MODEQ(mem_2op(RBP, RSI), 0x2E);
+    MODEQ(mem_2op(RBP, RDI), 0x2F);
+
+    // RSI
+    MODEQ(mem_2op(RSI, RAX), 0x30);
+    MODEQ(mem_2op(RSI, RCX), 0x31);
+    MODEQ(mem_2op(RSI, RDX), 0x32);
+    MODEQ(mem_2op(RSI, RBX), 0x33);
+    // [ RSP gap ]
+    MODEQ(mem_2op(RSI, RBP), 0x75); // Can't use mod=00 when reg is EBP.
+    MODEQ(mem_2op(RSI, RSI), 0x36);
+    MODEQ(mem_2op(RSI, RDI), 0x37);
+
+    // RDI
+    MODEQ(mem_2op(RDI, RAX), 0x38);
+    MODEQ(mem_2op(RDI, RCX), 0x39);
+    MODEQ(mem_2op(RDI, RDX), 0x3A);
+    MODEQ(mem_2op(RDI, RBX), 0x3B);
+    // [ RSP gap ]
+    MODEQ(mem_2op(RDI, RBP), 0x7D); // Can't use mod=00 when reg is EBP.
+    MODEQ(mem_2op(RDI, RSI), 0x3E);
+    MODEQ(mem_2op(RDI, RDI), 0x3F);
+#undef MODEQ
+#undef A_DISPLACEMENT
+
+    std::printf("\nTEST 11\n* OK\n\n");
+}
+
 int main()
 {
 //    DEBUG_STEP_BY_DEFAULT = true;
@@ -445,6 +552,7 @@ int main()
     test8();
     test9();
     test10();
+    test11();
 
     return 0;
 }

@@ -97,7 +97,8 @@ static bool is_gp8_register(Register reg)
 static bool requires_sib(ModrmSib const &modrmsib)
 {
 //    return !(modrmsib.disp_size == DISP_SIZE_NONE || /*modrmsib.scale == SCALE_1 ||*/ modrmsib.rm_reg == NOT_A_REGISTER);
-    return (modrmsib.base_reg != NOT_A_REGISTER || (modrmsib.disp_size != DISP_SIZE_NONE && modrmsib.disp != 0));
+    return (modrmsib.base_reg != NOT_A_REGISTER ||
+            (modrmsib.disp_size != DISP_SIZE_NONE && modrmsib.disp != 0));
 }
 
 bool Asm::reg_is_forbidden_in_rm(Register reg)
@@ -130,6 +131,10 @@ RawModrmSib Asm::raw_modrmsib(ModrmSib const &modrmsib)
          mod = 3;
          r.has_disp = false;
     }
+    else if (modrmsib.disp == 0 && modrmsib.rm_reg != EBP && modrmsib.rm_reg != RBP && modrmsib.rm_reg != R13) {
+        mod = 0;
+        r.has_disp = false;
+    }
     else if(modrmsib.disp_size == DISP_SIZE_8)
         mod = 1;
     else if (modrmsib.disp_size == DISP_SIZE_32)
@@ -147,7 +152,9 @@ RawModrmSib Asm::raw_modrmsib(ModrmSib const &modrmsib)
 
 //    std::printf("MOD %x RM %x REG %x\n", mod, rm, reg);
     // According to the x86 manuals, there's a weird gap in the licitly encodable instructions here:
-    assert(! (mod == 1 && (rm == 6 || rm == 7) && reg == 2));
+    // [UPDATE] Hmm, or maybe it's just a typographical error? The font in the modrm table is smaller in the relevant
+    // cell but it still contains 8 values, on closer inspection.
+//    assert(! (mod == 1 && (rm == 6 || rm == 7) && reg == 2));
 
     r.modrm = raw_modrm(mod, rm, reg);
 
