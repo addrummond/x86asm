@@ -441,6 +441,10 @@ public:
     NrDispSetter jp_nr_rel32(Disp<int32_t> const &disp, BranchHint hint=BRANCH_HINT_NONE) { jpe_nr_rel32(disp, hint); }
     NrDispSetter jnp_nr_rel32(Disp<int32_t> const &disp, BranchHint hint=BRANCH_HINT_NONE) { jpo_nr_rel32(disp, hint); }
 
+    // INT
+    void int3();
+    void int_imm8(uint8_t imm);
+
     // JMP (these have branch hints just to give the same method signature as other JMPs).
     StDispSetter jmp_nr_rel8(Disp<int8_t> const &disp, BranchHint hint=BRANCH_HINT_NONE);
     NrDispSetter jmp_nr_rel32(Disp<int32_t> const &disp, BranchHint hint=BRANCH_HINT_NONE);

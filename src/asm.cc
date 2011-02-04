@@ -1037,6 +1037,26 @@ INST2(js, 0x78) INST2(jz, 0x74)
 
 
 //
+// INT
+//
+template <class WriterT>
+void Asm::Assembler<WriterT>::int3()
+{
+//    DEBUG_STEPPING(a);
+    AB(0xCC);
+//    DEBUG_PRINT_INSTR(a, w);
+}
+template <class WriterT>
+void Asm::Assembler<WriterT>::int_imm8(uint8_t imm)
+{
+//    DEBUG_STEPPING(a);
+    AB(0xCD);
+    AB(imm);
+//    DEBUG_PRINT_INSTR(a, w);
+}
+
+
+//
 // JMP
 //
 
