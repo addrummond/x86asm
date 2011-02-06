@@ -862,7 +862,7 @@ static void emit_jump(MainLoopState &mls, Asm::Assembler<WriterT> &a, WriterT &w
 
     if (opcode == OP_CJMP) mls.last_instruction_exited = true;
 
-    typedef void (CountingVectorAssembler::*jmp_fptr)(Disp<int32_t> disp, BranchHint hint);
+    typedef CountingVectorAssembler::NrDispSetter (CountingVectorAssembler::*jmp_fptr)(Disp<int32_t> const &disp, BranchHint hint);
     struct Pr { Opcode opcode; BranchHint hint; jmp_fptr fptr; };
     static Pr const jmp_fptrs[] = {
         { OP_CJMP, BRANCH_HINT_NONE, &CountingVectorAssembler::jmp_nr_rel32 },
