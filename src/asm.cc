@@ -1119,6 +1119,29 @@ void Asm::Assembler<WriterT>::nop()
 }
 
 //
+// NOT
+//
+template <class WriterT, Size RM_SIZE>
+static void not_X_(Assembler<WriterT> &a, WriterT &w, ModrmSib modrmsib)
+{
+    assert((! modrmsib.has_reg_operand()) &&
+           modrmsib.gp3264_registers_only() &&
+           modrmsib.all_register_operands_have_size(RM_SIZE));
+    ABIFNZ(compute_rex(modrmsib, RM_SIZE));
+    AB(0xF7);
+    modrmsib.reg = RDX/*2*/;
+    write_modrmsib_disp(w, modrmsib);
+}
+
+#define INST(name, rm_size) \
+    template <class WriterT> void Asm::Assembler<WriterT>:: \
+    name (ModrmSib const &modrmsib) \
+    { not_X_<WriterT, rm_size>(*this, w, modrmsib); }
+INST(not_rm32, SIZE_32)
+INST(not_rm64, SIZE_64)
+#undef INST
+
+//
 // POP, PUSH
 //
 
@@ -1280,12 +1303,18 @@ void Asm::Assembler<WriterT>::emit_debug_print(char const *str)
 }
 
 template <class WriterT>
-void Asm::Assembler<WriterT>::emit_toggle_single_step_onoff()
+void Asm::Assembler<WriterT>::emit_toggle_single_step_onoff(bool on)
 {
     push_rm64(reg_1op(RAX));
     pushf();
     pop_rm64(reg_1op(RAX));
-    xor_rm64_imm8(reg_1op(RAX), 0x80);
+    if (on)
+        or_rm64_imm8(reg_1op(RAX), 0x80);
+    else {
+        not_rm64(reg_1op(RAX));
+        or_rm64_imm8(reg_1op(RAX), 0x80);
+        not_rm64(reg_1op(RAX));
+    }
     push_rm64(reg_1op(RAX));
     popf();
     pop_rm64(reg_1op(RAX));

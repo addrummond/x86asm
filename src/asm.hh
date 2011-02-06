@@ -477,6 +477,10 @@ public:
     // NOP
     void nop();
 
+    // NOT
+    void not_rm32(ModrmSib const &modrmsib);
+    void not_rm64(ModrmSib const &modrmsib);
+
     // OR
     void or_rm32_reg(ModrmSib const &modrmsib);
     void or_rm64_reg(ModrmSib const &modrmsib);
@@ -535,7 +539,7 @@ public:
     void emit_save_all_regs();
     void emit_restore_all_regs();
     void emit_debug_print(char const *str);
-    void emit_toggle_single_step_onoff();
+    void emit_toggle_single_step_onoff(bool on);
 #endif
 
 private:

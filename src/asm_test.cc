@@ -10,8 +10,8 @@ using namespace Asm;
 //#define DO_DEBUG_STEPPING 1
 
 #ifdef DO_DEBUG_STEPPING
-#   define START_STEPPING(a) (a).emit_toggle_single_step_onoff()
-#   define STOP_STEPPING(a) (a).emit_toggle_single_step_onoff()
+#   define START_STEPPING(a) ((a).emit_toggle_single_step_onoff(true))
+#   define STOP_STEPPING(a) ((a).emit_toggle_single_step_onoff(false))
 #else
 #   define START_STEPPING(a)
 #   define STOP_STEPPING(a)
@@ -77,10 +77,10 @@ void test1()
     a.dec_reg64(RCX);
     // SUB [RBX+(RCX*8)], 5
     a.sub_rm64_imm32(mem_1op(RBX, RCX, SCALE_8, 0), 5);
+    STOP_STEPPING(a);
     // LEAVE
     a.leave();
     // RET
-    STOP_STEPPING(a);
     a.ret();
 
     w.debug_print();   
@@ -117,8 +117,8 @@ void test2()
     ds.set(af - b4);
     a.mov_moffs64_rax(PTR(&val));
 
-    a.leave();
     STOP_STEPPING(a);
+    a.leave();
     a.ret();
 
     w.debug_print();
@@ -250,15 +250,17 @@ void test5()
     // end of args passed in registers >>>>>
     a.mov_reg_imm64(RCX, PTR(printf));
     a.mov_reg_imm32(EAX, 0);
+    STOP_STEPPING(a);
     a.call_rm64(reg_1op(RCX));
+    START_STEPPING(a);
     // Move the return value in EAX into the 'ret' var.
     a.mov_reg_imm64(RCX, PTR(&ret));
     a.mov_rm32_reg(mem_2op(EAX, RCX));
     // Clear EAX.
     a.mov_reg_imm32(EAX, 0);
 
-    a.leave();
     STOP_STEPPING(a);
+    a.leave();
     a.ret();
     
     w.debug_print();
@@ -331,8 +333,8 @@ void test7()
     a.cmp_rm64_imm8(mem_1op(RCX), 25);
     std::size_t af = w.size();
     a.jl_nr_rel32(mkdisp(static_cast<int32_t>(b4-af), DISP_SUB_ISIZE), BRANCH_HINT_TAKEN);
-    a.leave();
     STOP_STEPPING(a);
+    a.leave();
     a.ret();
 
     w.debug_print();
@@ -372,7 +374,6 @@ jump:
 #ifdef __GNUC__
     assert(after_label_address == reinterpret_cast<uint64_t>(&&after));
 #endif
-    START_STEPPING(a);
     a.jmp_nr_rel32(mkdisp<int32_t>(rel, DISP_SUB_ISIZE));
     w.get_exec_func()();
 
@@ -389,7 +390,6 @@ getaddr:
     alaa.mov_rm64_reg(mem_2op(RDX, RCX));
 
     alaa.leave();
-    STOP_STEPPING(a);
     alaa.ret();
 
     alaw.get_exec_func()();
@@ -590,12 +590,17 @@ int main()
     test3();
     test4();
     test5();
-    test6(); // CURRENTLY BROKEN WITH DEBUG STEPPING ON.
+    test6();
     test7();
     test8();
     test9();
     test10();
     test11();
+
+#ifdef DO_DEBUG_STEPPING
+    // This isn't actually necessary here; it's just to test this function.
+    Debug::unregister_single_stepping_signal_handler();
+#endif
 
     return 0;
 }
