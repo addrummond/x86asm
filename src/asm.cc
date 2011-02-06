@@ -423,11 +423,13 @@ Asm::DispSetter<WriterT, IntT>::DispSetter(WriterT &w_, std::size_t isize_, std:
 template <class WriterT, class IntT>
 void Asm::DispSetter<WriterT, IntT>::set(Disp<IntT> const &d)
 {
-    std::printf("DISP POS %li\n", disp_position);
+//    std::printf("DISP[%li] POS %li\n", sizeof(IntT), static_cast<long int>(disp_position));
     w.set_at(disp_position, d.get(isize));
 }
 template class DispSetter<VectorWriter, int8_t>;
 template class DispSetter<VectorWriter, int32_t>;
+template class DispSetter<CountingVectorWriter, int8_t>;
+template class DispSetter<CountingVectorWriter, int32_t>;
 
 
 //
