@@ -339,6 +339,11 @@ bool Vm::parse_vm_asm(std::string const &input, std::vector<uint8_t> &instructio
 
 typedef void(*ErrorHandler)(struct MainLoopState &mls);
 
+struct SavedRegisters {
+    uint64_t gp_registers[16];
+    uint64_t xmm_registers[32];
+    uint64_t flags;
+};
 struct MainLoopState {
     MainLoopState(Vm::VectorAssemblerBroker &ab_, std::vector<uint8_t> &instructions_)
         : ab(ab_), instructions(instructions_) { }
@@ -348,7 +353,7 @@ struct MainLoopState {
     std::size_t start;
     std::vector<uint8_t>::const_iterator position_of_last_incrw;
     std::size_t BLOB_SIZE;
-    uint64_t saved_registers[16];
+    SavedRegisters saved_registers;
     bool registers_are_saved;
     std::size_t current_num_vm_registers;
     uint64_t initial_base_pointer_for_main_loop;
@@ -712,14 +717,15 @@ static void check_tag(MainLoopState const &mls, Asm::Assembler<WriterT> &a, Writ
     a.mov_reg_rm64(reg_2op(scratch_reg, x86reg));
     a.and_rm64_imm8(reg_1op(scratch_reg), (uint8_t)TAG_MASK);
     a.cmp_rm64_imm8(reg_1op(scratch_reg), (uint8_t)expected_tag_value);
-    debug_print_x86reg64(mls, a, x86reg, "RRRR: ");
+//    debug_print_x86reg64(mls, a, x86reg, "RRRR: ");
 //    debug_print_x86reg64(mls, a, scratch_reg, "REGV: ");
-//    a.jne_st_rel8(0); // Going to fill this in in a minute.
-//    std::size_t byte = w.size();
-//    a.mov_reg_imm64(scratch_reg, mls.type_error_handler_asm->get_start_addr());
-//    a.jmp_nr_rm64(reg_1op(scratch_reg));
-//    std::size_t af = w.size();
-//    w.set_at(byte - 1, (int8_t)(af - byte)); // Set single-byte relative jump offset.
+    typename Asm::Assembler<WriterT>::StDispSetter ds = a.jne_st_rel8(0); // Going to fill this in in a minute.
+    std::size_t byte = w.size();
+    a.mov_reg_imm64(scratch_reg, mls.type_error_handler_asm->get_start_addr());
+    a.jmp_nr_rm64(reg_1op(scratch_reg));
+    std::size_t af = w.size();
+    std::printf("SIZE %li\n", af - byte);
+    ds.set(af - byte);
 }
 
 template <class WriterT>
@@ -731,7 +737,7 @@ static void emit_iadd(MainLoopState const &mls, Asm::Assembler<WriterT> &a, Writ
 
     // Check that the values are integers.
     check_tag(mls, a, w, RDX, TAG_INT, RSI/*scratch*/);
-//    check_tag(mls, a, w, RBX, TAG_INT, RSI/*scratch*/);
+    check_tag(mls, a, w, RBX, TAG_INT, RSI/*scratch*/);
 
     a.mov_reg_rm64(mem_2op(RAX, r1));
     a.add_reg_rm64(mem_2op(RAX, r2));
@@ -762,39 +768,69 @@ static const Asm::Register gp_regs[] = {
     Asm::RAX, Asm::RCX, Asm::RDX, Asm::RBX, Asm::RSP, Asm::RBP, Asm::RSI, Asm::RDI,
     Asm::R8, Asm::R9, Asm::R10, Asm::R11, Asm::R12, Asm::R13, Asm::R14, Asm::R15
 };
-static void save_all_regs(Asm::CountingVectorAssembler &a, uint64_t *buffer)
+static void save_all_regs(Asm::CountingVectorAssembler &a, SavedRegisters &saved)
 {
     using namespace Asm;
 
-    assert(buffer != NULL);
+    // Note that this function isn't supposed to save ALL registers. Just those
+    // registers which hold state which might carry across VM instructions. So for
+    // example, we're not saving the flags register, because any use of this register
+    // should be self-contained for each VM instruction. Right now, we're also not
+    // saving XMM regs since the VM doesn't do any floating point yet.
 
+    // We're going to use RAX as scratch, so save it first.
     a.push_reg64(RAX);
-    a.mov_reg_imm64(RAX, PTR(buffer));
-    unsigned i = 1;
+
+    // Save general purpose registers.
+    a.mov_reg_imm64(RAX, PTR(saved.gp_registers));
+    unsigned i = 1; // Skipping RAX (see below).
     for (; i < sizeof(gp_regs) / sizeof(Register); ++i) {
         a.mov_rm64_reg(mem_2op_short(gp_regs[i], RAX, NOT_A_REGISTER, SCALE_1, i*8));
     }
+    // Save flags.
+//    a.pushf();
+//    a.pop_reg64(RAX);
+//    a.mov_moffs64_rax(PTR(&(saved.flags)));
+    // Save XMM regs.
+//    a.mov_reg_imm64(RAX, PTR(saved.xmm_registers));
+//    for (int i = XMM0; i <= XMM15; ++i) {
+//        a.movdqu_mmm128_mm(mem_2op(static_cast<Register>(i)/*reg*/, RAX/*base*/, NOT_A_REGISTER/*index*/, SCALE_1, (i-XMM0+1)*-16));
+//    }
+
+    // Restore RAX (we were using it as scratch) and save its value.
     a.pop_reg64(RAX);
     a.push_reg64(RCX);
-    a.mov_reg_imm64(RCX, PTR(buffer));
+    a.mov_reg_imm64(RCX, PTR(&(saved.gp_registers[0])));
     a.mov_rm64_reg(mem_2op_short(RAX, RCX));
     a.pop_reg64(RCX);
 }
 template <class WriterT>
-static void restore_all_regs(Asm::Assembler<WriterT> &a, uint64_t *buffer, Asm::Register except=Asm::NOT_A_REGISTER)
+static void restore_all_regs(Asm::Assembler<WriterT> &a, SavedRegisters &saved, Asm::Register except=Asm::NOT_A_REGISTER)
 {
     using namespace Asm;
 
-    assert(buffer != NULL);
+    // ... using RAX as scratch (it will get restored in a minute).
 
-    a.mov_reg_imm64(RAX, PTR(buffer));
+    // Restore general purpose registers.
+    a.mov_reg_imm64(RAX, PTR(saved.gp_registers));
     unsigned i = 1;
     for (; i < sizeof(gp_regs) / sizeof(Register); ++i) {
         if (gp_regs[i] != except)
             a.mov_reg_rm64(mem_2op_short(gp_regs[i], RAX, NOT_A_REGISTER, SCALE_1, i*8));
     }
+    // Restore flags register.
+//    a.mov_reg_imm64(RAX, PTR(&(saved.flags)));
+//    a.push_rm64(reg_1op(RAX));
+//    a.popf();
+    // Restore XMM registers.
+//    a.mov_reg_imm64(RAX, PTR(saved.xmm_registers));
+//    for (int i = XMM0; i <= XMM15; ++i) {
+//        a.movdqu_mm_mmm128(mem_2op(static_cast<Register>(i)/*reg*/, RAX/*base*/, NOT_A_REGISTER/*index*/, SCALE_1, (i-XMM0+1)*-16));
+//    }
+
+    // Restore RAX.
     a.push_reg64(RCX);
-    a.mov_reg_imm64(RCX, PTR(buffer));
+    a.mov_reg_imm64(RCX, PTR(&(saved.gp_registers[0])));
     a.mov_reg_rm64(mem_2op_short(RAX, RCX));
     a.pop_reg64(RCX);
 }
