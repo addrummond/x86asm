@@ -31,21 +31,25 @@ using namespace Vm;
 // When debugging, we want to check that register saving is working properly. Hence,
 // we use registers that need to be saved before using those that don't.
 #ifdef DEBUG
-const Asm::Register vm_regs_x86_regs[] = { Asm::R8, Asm::R9, Asm::R10, Asm::R11, Asm::RDI, Asm::RSI, /*Asm::R12,*/ Asm::R13, Asm::R14, Asm::R15, Asm::RCX  };
-const bool vm_regs_x86_regs_to_save[] =  { true,    true,    true,     true,     true,     true,     /*false,*/    false,    false,    false,    true };
+const Asm::Register vm_regs_x86_regs[] = { Asm::R8, Asm::R9, Asm::R10, Asm::R11, Asm::RDI, /*Asm::R12,*/ Asm::R13, Asm::R14, Asm::R15, Asm::RCX  };
+const bool vm_regs_x86_regs_to_save[] =  { true,    true,    true,     true,     true,     /*false,*/    false,    false,    false,    true };
 #else
-//const Asm::Register vm_regs_x86_regs[] = { /*Asm::R12,*/ Asm::R13, Asm::R14, Asm::R15, Asm::R8, Asm::R9, Asm::R10, Asm::R11, Asm::RCX, Asm::RDI, Asm::RSI, };
-//const bool vm_regs_x86_regs_to_save[] =  { /*false,*/    false,    false,    false,    true,    true,    true,     true,     true,     true,     true,     };
+//const Asm::Register vm_regs_x86_regs[] = { /*Asm::R12,*/ Asm::R13, Asm::R14, Asm::R15, Asm::R8, Asm::R9, Asm::R10, Asm::R11, Asm::RCX, Asm::RDI };
+//const bool vm_regs_x86_regs_to_save[] =  { /*false,*/    false,    false,    false,    true,    true,    true,     true,     true,     true     };
 #endif
 const int NUM_VM_REGS_IN_X86_REGS = sizeof(vm_regs_x86_regs)/sizeof(Asm::Register);
-
-static Asm::Register registers_to_save_before_c_funcall[] = { Asm::RBX };
 
 const Opcode Vm::FIRST_OP = OP_EXIT;
 
 // We can have 127 on the machine stack and some number in registers.
 const unsigned Vm::MAX_REG_ID = 127 + 4;
 const unsigned MAX_VM_REGS = MAX_REG_ID-1;
+
+#ifdef DEBUG
+#   define SCRATCH_REG(r) (assert((r) == RAX || (r) == RBX || (r) == RDX || (r) == RSI), r)
+#else
+#   define SCRATCH_REG(r) (r)
+#endif
 
 static char const *op_names[] = {
     "EXIT",
@@ -736,8 +740,8 @@ static void emit_iadd(MainLoopState const &mls, Asm::Assembler<WriterT> &a, Writ
     Register r2 = move_vmreg_ptr_to_x86reg(a, RBX, r_src);
 
     // Check that the values are integers.
-    check_tag(mls, a, w, RDX, TAG_INT, RSI/*scratch*/);
-    check_tag(mls, a, w, RBX, TAG_INT, RSI/*scratch*/);
+    check_tag(mls, a, w, RDX, TAG_INT, SCRATCH_REG(RSI));
+    check_tag(mls, a, w, RBX, TAG_INT, SCRATCH_REG(RSI));
 
     a.mov_reg_rm64(mem_2op(RAX, r1));
     a.add_reg_rm64(mem_2op(RAX, r2));
@@ -841,6 +845,9 @@ static void restore_all_regs(Asm::Assembler<WriterT> &a, SavedRegisters &saved, 
 template <class WriterT>
 static void save_regs_before_c_funcall(MainLoopState const &mls, Asm::Assembler<WriterT> &a)
 {
+//    a.emit_save_all_regs();
+//    return;
+
     using namespace Asm;
     for (int i = 0; i < NUM_VM_REGS_IN_X86_REGS && i < mls.current_num_vm_registers; ++i) {
 //  for (int i = 0; i < sizeof(vm_regs_x86_regs) / sizeof(Register); ++i) {
@@ -851,11 +858,16 @@ static void save_regs_before_c_funcall(MainLoopState const &mls, Asm::Assembler<
 //          std::printf("SAVED %s\n", register_name(r));
         }
     }
+    a.pushf();
 }
 template <class WriterT>
 static void restore_regs_after_c_funcall(MainLoopState const &mls, Asm::Assembler<WriterT> &a)
 {
+//    a.emit_restore_all_regs();
+//    return;
+
     using namespace Asm;
+    a.popf();
     for (int i = std::min(static_cast<int>(mls.current_num_vm_registers), static_cast<int>(NUM_VM_REGS_IN_X86_REGS)) - 1; i >= 0; --i) {
 //    for (int i = (sizeof(vm_regs_x86_regs) / sizeof(Register)) - 1; i >= 0; --i) {
         if (vm_regs_x86_regs_to_save[i]) {
