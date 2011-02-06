@@ -539,7 +539,7 @@ public:
     void emit_save_all_regs();
     void emit_restore_all_regs();
     void emit_debug_print(char const *str);
-    void emit_toggle_single_step_onoff(bool on);
+    void emit_set_single_step_onoff(bool on);
 #endif
 
 private:

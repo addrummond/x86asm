@@ -1303,7 +1303,7 @@ void Asm::Assembler<WriterT>::emit_debug_print(char const *str)
 }
 
 template <class WriterT>
-void Asm::Assembler<WriterT>::emit_toggle_single_step_onoff(bool on)
+void Asm::Assembler<WriterT>::emit_set_single_step_onoff(bool on)
 {
     push_rm64(reg_1op(RAX));
     pushf();

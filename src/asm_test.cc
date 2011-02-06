@@ -10,8 +10,8 @@ using namespace Asm;
 //#define DO_DEBUG_STEPPING 1
 
 #ifdef DO_DEBUG_STEPPING
-#   define START_STEPPING(a) ((a).emit_toggle_single_step_onoff(true))
-#   define STOP_STEPPING(a) ((a).emit_toggle_single_step_onoff(false))
+#   define START_STEPPING(a) ((a).emit_set_single_step_onoff(true))
+#   define STOP_STEPPING(a) ((a).emit_set_single_step_onoff(false))
 #else
 #   define START_STEPPING(a)
 #   define STOP_STEPPING(a)
