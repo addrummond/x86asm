@@ -1308,9 +1308,13 @@ void Asm::Assembler<WriterT>::emit_toggle_single_step_onoff(bool on)
     push_rm64(reg_1op(RAX));
     pushf();
     pop_rm64(reg_1op(RAX));
-    if (on)
+    if (on) {
         or_rm64_imm8(reg_1op(RAX), 0x80);
+    }
     else {
+        // Slightly roundabout method (we can't just AND RAX with a 64-bit
+        // immediate value because x86 instruction encoding generally doesn't
+        // permit 64-bit immediate values).
         not_rm64(reg_1op(RAX));
         or_rm64_imm8(reg_1op(RAX), 0x80);
         not_rm64(reg_1op(RAX));
