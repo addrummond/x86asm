@@ -3,6 +3,7 @@
 #include <cstdio>
 #include <iostream>
 #include <util.hh>
+#include <debug.hh>
 
 using namespace Asm;
 
@@ -23,6 +24,7 @@ void test1()
     // This test also includes some machinary unnecessary for a 0-argument
     // void function (saving the base pointer and then restoring it via LEAVE).
 
+//    a.emit_toggle_single_step_onoff();
     // PUSH RBP
     a.push_reg64(RBP);
     // MOV RBP, RSP
@@ -550,6 +552,8 @@ void test11()
 
 int main()
 {
+    Debug::register_single_stepping_signal_handler();
+
     test1();
     test2();
     test3();
