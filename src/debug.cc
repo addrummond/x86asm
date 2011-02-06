@@ -16,6 +16,8 @@ extern "C" {
 #endif
 }
 
+static unsigned in_function_count; // Guaranteed to be initialized to 0.
+static bool go_into_functions; // Ditto.
 static void debug_signal_handler(int signal, siginfo_t *si, void *uctx)
 {
     assert(signal == SIGTRAP);
@@ -27,9 +29,21 @@ static void debug_signal_handler(int signal, siginfo_t *si, void *uctx)
     ud_set_mode(&ud, 64);
     ud_set_syntax(&ud, UD_SYN_INTEL);
     ud_disassemble(&ud);
-    std::printf("About to exec: %s\nPress return to continue", ud_insn_asm(&ud));
+    if ((! go_into_functions) && in_function_count > 0)
+        return;
+    char const *asm_str = ud_insn_asm(&ud);
+    std::size_t len = std::strlen(asm_str);
+    if ((! go_into_functions) && len >= 4 && asm_str[0] == 'c' && asm_str[1] == 'a' && asm_str[2] == 'l' && asm_str[3] == 'l') {
+        ++in_function_count;
+    }
+    else if ((! go_into_functions) && len >= 3 && asm_str[0] == 'r' && asm_str[1] == 'e' && asm_str[2] == 't') {
+        --in_function_count;
+    }
+    std::printf("0x%.16llx: %s\nPress return to continue", si->si_addr, ud_insn_asm(&ud));
 #else
     std::printf("[Some instruction -- not linked to udis86]\nPress return to continue");
+    if (! go_into_functions)
+        std::printf("[\"Don't go into functions\" functionality not enabled.]");
 #endif
 
     while (std::getchar() != '\n');
@@ -40,7 +54,7 @@ static void debug_signal_handler(int signal, siginfo_t *si, void *uctx)
 // be in a consistent state. However, it should be good enough to catch a few bugs.
 static bool is_registered; // Guaranteed to be initialized to false.
 static struct sigaction old_act;
-void Debug::register_single_stepping_signal_handler()
+void Debug::register_single_stepping_signal_handler(bool go_into_functions_)
 {
     assert(! is_registered);
 
@@ -53,6 +67,7 @@ void Debug::register_single_stepping_signal_handler()
         exit(1);
     }
     is_registered = true;
+    go_into_functions = go_into_functions_;
 }
 
 void Debug::unregister_single_stepping_signal_handler()
@@ -64,6 +79,11 @@ void Debug::unregister_single_stepping_signal_handler()
         std::exit(1);
     }
     is_registered = false;
+}
+
+bool Debug::single_stepping_signal_handler_is_registered()
+{
+    return is_registered;
 }
 
 #endif
