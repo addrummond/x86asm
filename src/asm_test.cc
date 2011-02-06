@@ -7,6 +7,16 @@
 
 using namespace Asm;
 
+//#define DO_DEBUG_STEPPING 1
+
+#ifdef DO_DEBUG_STEPPING
+#   define START_STEPPING(a) (a).emit_toggle_single_step_onoff()
+#   define STOP_STEPPING(a) (a).emit_toggle_single_step_onoff()
+#else
+#   define START_STEPPING(a)
+#   define STOP_STEPPING(a)
+#endif
+
 //
 // Tests MOV, INC, DEC, ADD, SUB and IMUL.
 //
@@ -24,7 +34,8 @@ void test1()
     // This test also includes some machinary unnecessary for a 0-argument
     // void function (saving the base pointer and then restoring it via LEAVE).
 
-//    a.emit_toggle_single_step_onoff();
+    START_STEPPING(a);
+
     // PUSH RBP
     a.push_reg64(RBP);
     // MOV RBP, RSP
@@ -69,6 +80,7 @@ void test1()
     // LEAVE
     a.leave();
     // RET
+    STOP_STEPPING(a);
     a.ret();
 
     w.debug_print();   
@@ -92,6 +104,7 @@ void test2()
     // Set RAX to 1. Compare RAX with 101. Jump over an instruction
     // setting RAX to 2. Copy value of RAX into 'val'; should = 1.
 
+    START_STEPPING(a);
     a.push_reg64(RBP);
     a.mov_reg_reg64(RBP, RSP);
 
@@ -105,6 +118,7 @@ void test2()
     a.mov_moffs64_rax(PTR(&val));
 
     a.leave();
+    STOP_STEPPING(a);
     a.ret();
 
     w.debug_print();
@@ -125,6 +139,7 @@ void test3()
     VectorWriter w;
     VectorAssembler a(w);
 
+    START_STEPPING(a);
     a.mov_reg_imm64(RDX, 1); // Value to be doubled on each iteration.
     a.mov_reg_imm64(RAX, 0); // Loop counter.
     
@@ -144,6 +159,7 @@ void test3()
     a.mov_reg_imm64(RAX, PTR(&val));
     a.mov_rm64_reg(mem_2op(RDX, RAX));
 
+    STOP_STEPPING(a);
     a.ret();
 
     w.debug_print();
@@ -169,6 +185,7 @@ void test4()
     VectorWriter w;
     VectorAssembler a(w);
 
+    START_STEPPING(a);
     // Code in loop.
     std:size_t loop_start = w.size();
     // Load fval into the first FP reg.
@@ -192,6 +209,7 @@ void test4()
     // Loop if 'fval' is less than 100.
     a.ja_nr_rel32(mkdisp(static_cast<int32_t>(loop_start-loop_end), DISP_SUB_ISIZE), BRANCH_HINT_TAKEN);
 
+    STOP_STEPPING(a);
     a.ret();
 
     w.debug_print();
@@ -221,6 +239,7 @@ void test5()
     VectorWriter w;
     VectorAssembler a(w);
 
+    START_STEPPING(a);
     a.push_reg64(RBP); // Function preamble (unnecessary since this func doesn't take any args).
     a.mov_reg_reg64(RBP, RSP);
 
@@ -239,6 +258,7 @@ void test5()
     a.mov_reg_imm32(EAX, 0);
 
     a.leave();
+    STOP_STEPPING(a);
     a.ret();
     
     w.debug_print();
@@ -259,6 +279,7 @@ void test6()
 
     uint64_t val;
 
+    START_STEPPING(a);
     a.push_reg64(RBP); // Function preamble.
     a.mov_reg_reg64(RBP, RSP);
 
@@ -277,6 +298,7 @@ void test6()
     a.mov_reg_imm64(RAX, 15);
     a.mov_moffs64_rax(PTR(&val));
     a.leave();
+    STOP_STEPPING(a);
     a.ret();
 
     w.debug_print();
@@ -300,6 +322,7 @@ void test7()
     VectorWriter w;
     VectorAssembler a(w);
 
+    START_STEPPING(a);
     a.push_reg64(RBP); // Function preamble.
     a.mov_reg_reg64(RBP, RSP);
     std::size_t b4 = w.size();
@@ -309,6 +332,7 @@ void test7()
     std::size_t af = w.size();
     a.jl_nr_rel32(mkdisp(static_cast<int32_t>(b4-af), DISP_SUB_ISIZE), BRANCH_HINT_TAKEN);
     a.leave();
+    STOP_STEPPING(a);
     a.ret();
 
     w.debug_print();
@@ -348,6 +372,7 @@ jump:
 #ifdef __GNUC__
     assert(after_label_address == reinterpret_cast<uint64_t>(&&after));
 #endif
+    START_STEPPING(a);
     a.jmp_nr_rel32(mkdisp<int32_t>(rel, DISP_SUB_ISIZE));
     w.get_exec_func()();
 
@@ -364,7 +389,9 @@ getaddr:
     alaa.mov_rm64_reg(mem_2op(RDX, RCX));
 
     alaa.leave();
+    STOP_STEPPING(a);
     alaa.ret();
+
     alaw.get_exec_func()();
 
 after:
@@ -410,6 +437,7 @@ void test10()
 
     uint64_t nonzero_dwords[] = { 10, 20, 30, 40, 50, 60, 70, 80, 90, 100 };
 
+    START_STEPPING(a);
     a.push_reg64(RBP); // Function preamble.
     a.mov_reg_reg64(RBP, RSP);
 
@@ -426,6 +454,7 @@ void test10()
     std::size_t loop_end = w.size();
     a.jl_nr_rel32(mkdisp(static_cast<int32_t>(loop_start-loop_end), DISP_SUB_ISIZE));
     a.leave();
+    STOP_STEPPING(a);
     a.ret();
 
     w.debug_print();
@@ -552,7 +581,9 @@ void test11()
 
 int main()
 {
+#ifdef DO_DEBUG_STEPPING
     Debug::register_single_stepping_signal_handler();
+#endif
 
     test1();
     test2();
