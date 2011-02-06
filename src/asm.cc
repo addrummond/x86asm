@@ -16,10 +16,6 @@ namespace udis86 {
 
 using namespace Asm;
 
-#ifdef DEBUG
-bool Asm::DEBUG_STEP_BY_DEFAULT = false;
-#endif
-
 // Register codes.
 namespace Asm {
 static const uint8_t register_codes[] = {
@@ -407,44 +403,6 @@ Disp<IntT> Asm::mkdisp(IntT i, DispOp op) { return Disp<IntT>(i, op); }
 template Disp<int8_t> Asm::mkdisp<int8_t>(int8_t i, DispOp op);
 template Disp<int32_t> Asm::mkdisp<int32_t>(int32_t i, DispOp op);
 
-#ifndef DEBUG
-#define DEBUG_STEPPING(a)
-#define DEBUG_PRINT_INSTR(a, w)
-#else
-#define DEBUG_STEPPING(a) \
-    do { \
-        Assembler<WriterT> &a_ = (a); \
-        if (a_.debug_stepping_is_on()) { \
-            a_.stop_debug_stepping(); \
-            a_.emit_step_point(); \
-            a_.start_debug_stepping(); \
-        } \
-        a_.store_last_instruction_offset(); \
-    } while (0)
-#ifdef CONFIG_UDIS86
-// This leaks memory, but it doesn't really matter as we just use it for debugging.
-#define DEBUG_PRINT_INSTR(a, w) \
-    do { \
-        Assembler<WriterT> &a_ = (a); \
-        if (! a_.debug_stepping_is_on()) break; \
-        WriterT &w_ = (w); \
-        udis86::ud_t ud; \
-        udis86::ud_init(&ud); \
-        udis86::ud_set_input_buffer(&ud, w_.get_mem() + a_.get_last_instruction_offset(), w_.size() - a_.get_last_instruction_offset()); \
-        udis86::ud_set_mode(&ud, 64); \
-        udis86::ud_set_syntax(&ud, udis86::UD_SYN_INTEL); \
-        udis86::ud_disassemble(&ud); \
-        a_.stop_debug_stepping(); \
-        std::string *s = new std::string("JUST EXECUTED: "); \
-        s->append(udis86::ud_insn_asm(&ud)); \
-        a_.emit_debug_print(s->c_str()); \
-        a_.start_debug_stepping(); \
-    } while (0)
-#else
-#define DEBUG_PRINT_INSTR(a, w)
-#endif
-#endif
-
 // Disp.
 template <class IntT>
 Asm::Disp<IntT>::Disp(IntT i_) : i(i_), op(DISP_NO_OP) { }
@@ -485,11 +443,9 @@ static void X_rm_reg_(Assembler<WriterT> &a, WriterT &w, ModrmSib const &modrmsi
 {
     assert(modrmsib.gp3264_registers_only() &&
            modrmsib.all_register_operands_have_size(RM_SIZE));
-    DEBUG_STEPPING(a);
     ABIFNZ(compute_rex(modrmsib, RM_SIZE));
     AB(OPCODE);
     write_modrmsib_disp(w, modrmsib);
-    DEBUG_PRINT_INSTR(a, w);
 }
 
 #define INST(name, opcode, rm_size) \
@@ -534,8 +490,6 @@ static void add_rmXX_imm32_(Assembler<WriterT> &a, WriterT &w, ModrmSib modrmsib
            modrmsib.gp3264_registers_only() /*&&
            modrmsib.all_register_operands_have_size(RM_SIZE)*/);
 
-    DEBUG_STEPPING(a);
-
     if (SIMPLE_OPCODE && modrmsib.simple_register() == EAX) {
         assert(RM_SIZE == SIZE_32);
         AB(SIMPLE_OPCODE);
@@ -553,8 +507,6 @@ static void add_rmXX_imm32_(Assembler<WriterT> &a, WriterT &w, ModrmSib modrmsib
     }
 
     w.a(reinterpret_cast<uint8_t *>(&src), IMM_SIZE);
-
-    DEBUG_PRINT_INSTR(a, w);
 }
 
 #define INST(name, size, immt, imm_size, simple_opcode, complex_opcode, extension) \
@@ -599,11 +551,9 @@ INST(xor_rm64_imm32, SIZE_64, uint32_t, SIZE_32, 0x81, 0x81, ESI/*6*/)
 template <class WriterT>
 typename Asm::Assembler<WriterT>::NrDispSetter Asm::Assembler<WriterT>::call_rel32(Disp<int32_t> const &disp)
 {
-//    DEBUG_STEPPING(*this);
     AB(0xE8);
     std::size_t disp_position = w.size();
     A32(disp.get(5));
-//    DEBUG_PRINT_INSTR(*this, w);
     return typename Asm::Assembler<WriterT>::NrDispSetter(w, 5, disp_position);
 }
 
@@ -611,11 +561,9 @@ template <class WriterT>
 void Asm::Assembler<WriterT>::call_rm64(ModrmSib modrmsib)
 {
     assert(! modrmsib.has_reg_operand());
-    DEBUG_STEPPING(*this);
     AB(0xFF);
     modrmsib.reg = EDX/*2*/;
     write_modrmsib_disp(w, modrmsib);
-    DEBUG_PRINT_INSTR(*this, w);
 }
 
 //
@@ -630,8 +578,6 @@ static void cmp_rmXX_imm_(Assembler<WriterT> &a, WriterT &w, ModrmSib modrmsib, 
            (modrmsib.simple_register() == NOT_A_REGISTER ||
             register_byte_size(modrmsib.simple_register()) == BYTE_SIZE));
 
-    DEBUG_STEPPING(a);
-
     if (BYTE_SIZE == 8 && ImmTSize == 4 && modrmsib.simple_register() == RAX) {
         a.cmp_rax_imm32(imm);
     }
@@ -642,7 +588,6 @@ static void cmp_rmXX_imm_(Assembler<WriterT> &a, WriterT &w, ModrmSib modrmsib, 
         write_modrmsib_disp(w, modrmsib);
         w.a(reinterpret_cast<uint8_t*>(&imm), ImmTSize);
     }
-    DEBUG_PRINT_INSTR(a, w);
 }
 
 // Note that sizeof(int32_t) == 8 (on some platforms anyway),
@@ -660,11 +605,9 @@ INST(cmp_rm64_imm32, 8, SIZE_64, 0x81, EDI/*7*/, uint32_t, SIZE_32)
 template <class WriterT, uint8_t REXBYTE, uint8_t OPCODE, class ImmT, Size ImmTSize>
 static void cmp_XX_imm32_(Assembler<WriterT> &a, WriterT &w, ImmT imm)
 {
-    DEBUG_STEPPING(a);
     ABIFNZ(REXBYTE);
     AB(OPCODE);
     w.a(reinterpret_cast<uint8_t*>(&imm), ImmTSize);
-    DEBUG_PRINT_INSTR(a, w);
 }
 
 #define INST(name, rexbyte, opcode, immtype, immtypesize) \
@@ -679,11 +622,9 @@ INST(cmp_rax_imm32, REX_PREFIX | REX_W, 0x3D, uint32_t, SIZE_32)
 template <class WriterT, Size SIZE>
 static void cmp_rmXX_reg_(Assembler<WriterT> &a, WriterT &w, ModrmSib const &modrmsib)
 {
-    DEBUG_STEPPING(a);
     ABIFNZ(compute_rex(modrmsib, SIZE));
     AB(0x39);
     write_modrmsib_disp(w, modrmsib);
-    DEBUG_PRINT_INSTR(a, w);
 }
 #define INST(name, size) \
     template <class WriterT> void Asm::Assembler<WriterT>:: \
@@ -699,9 +640,7 @@ INST(cmp_rm64_reg, SIZE_64)
 template <class WriterT>
 void Asm::Assembler<WriterT>::fabs_st0()
 {
-    DEBUG_STEPPING(*this);
     AZ("\xD9\xE1");
-    DEBUG_PRINT_INSTR(*this, w);
 }
 
 //
@@ -710,12 +649,10 @@ void Asm::Assembler<WriterT>::fabs_st0()
 template <class WriterT, uint8_t OPCODE, Register EXTENSION>
 static void fadd_st0_mXXfp_(Assembler<WriterT> &a, WriterT &w, ModrmSib modrmsib)
 {
-    DEBUG_STEPPING(a);
     assert(modrmsib.simple_memory());
     AB(OPCODE);
     modrmsib.reg = EXTENSION;
     write_modrmsib_disp(w, modrmsib);
-    DEBUG_PRINT_INSTR(a, w);
 }
 
 #define INST(name, opcode, extension) \
@@ -743,10 +680,8 @@ template <class WriterT, uint8_t OPCODE1, uint8_t OPCODE2>
 static void fadd_st_st_(Assembler<WriterT> &a, WriterT &w, unsigned streg)
 {
     assert(streg < 8);
-    DEBUG_STEPPING(a);
     AB(OPCODE1);
     AB(OPCODE2 + streg);
-    DEBUG_PRINT_INSTR(a, w);
 }
 
 #define INST(name, opcode1, opcode2) \
@@ -764,7 +699,7 @@ INST(fdiv_st0_st, 0xD8, 0xF0)
 #undef INST
 
 #define INST(name, opcode) \
-    template <class WriterT> void Asm::Assembler<WriterT>::name() { DEBUG_STEPPING(*this); AZ(opcode); DEBUG_PRINT_INSTR(*this, w); }
+    template <class WriterT> void Asm::Assembler<WriterT>::name() { AZ(opcode); }
 INST(faddp, "\xDE\xC1")
 INST(fsubp, "\xDE\xE9")
 INST(fmulp, "\xDE\xC9")
@@ -778,10 +713,8 @@ template <class WriterT, uint8_t OPCODE1, uint8_t OPCODE2>
 static void Xcom_st_sti(Assembler<WriterT> &a, WriterT &w, unsigned streg)
 {
     assert(streg < 8);
-    DEBUG_STEPPING(a);
     AB(OPCODE1);
     AB(OPCODE2 + streg);
-    DEBUG_PRINT_INSTR(a, w);
 }
 
 #define INST(name, opcode1, opcode2) \
@@ -797,7 +730,7 @@ INST(fucomp_st0_st, 0xDF, 0xE8)
 // FDECSTP, FINCSTP
 //
 #define INST(name, opcode) \
-    template <class WriterT> void Asm::Assembler<WriterT>:: name () { DEBUG_STEPPING(*this); AZ(opcode); DEBUG_PRINT_INSTR(*this, w); }
+    template <class WriterT> void Asm::Assembler<WriterT>:: name () { AZ(opcode); }
 INST(fdecstp, "\xD9\xF6")
 INST(fincstp, "\xD9\xF7")
 #undef INST
@@ -809,11 +742,9 @@ template <class WriterT, uint8_t OPCODE, Register EXTENSION>
 static void fld_mX_(Assembler<WriterT> &a, WriterT &w, ModrmSib modrmsib)
 {
     assert(modrmsib.simple_memory());
-    DEBUG_STEPPING(a);
     AB(OPCODE);
     modrmsib.reg = EXTENSION;
     write_modrmsib_disp(w, modrmsib);
-    DEBUG_PRINT_INSTR(a, w);
 }
 
 #define INST(name, opcode, extension) \
@@ -831,10 +762,8 @@ INST(fild_m64int, 0xDF, EBP/*5*/)
 template <class WriterT> void Asm::Assembler<WriterT>::fld_st(unsigned streg)
 {
     assert(streg < 8);
-    DEBUG_STEPPING(*this);
     AB(0xD9);
     AB(0xC0 + streg);
-    DEBUG_PRINT_INSTR(*this, w);
 }
 
 //
@@ -842,9 +771,7 @@ template <class WriterT> void Asm::Assembler<WriterT>::fld_st(unsigned streg)
 //
 template <class WriterT> void Asm::Assembler<WriterT>::fnop()
 {
-    DEBUG_STEPPING(*this);
     AZ("\xD9\xD0");
-    DEBUG_PRINT_INSTR(*this, w);
 }
 
 //
@@ -854,11 +781,9 @@ template <class WriterT, uint8_t OPCODE, Register EXTENSION>
 static void fst_mXX_st0_(Assembler<WriterT> &a, WriterT &w, ModrmSib modrmsib)
 {
     assert(modrmsib.simple_memory());
-    DEBUG_STEPPING(a);
     AB(OPCODE);
     modrmsib.reg = EXTENSION;
     write_modrmsib_disp(w, modrmsib);
-    DEBUG_PRINT_INSTR(a, w);
 }
 
 #define INST(name, opcode, extension) \
@@ -876,19 +801,15 @@ template <class WriterT>
 void Asm::Assembler<WriterT>::fst_st_st0(unsigned streg_dest)
 {
     assert(streg_dest < 8);
-    DEBUG_STEPPING(*this);
     AB(0xDD);
     AB(0xD0 + streg_dest);
-    DEBUG_PRINT_INSTR(*this, w);
 }
 template <class WriterT>
 void Asm::Assembler<WriterT>::fstp_st_st0(unsigned streg_dest)
 {
     assert(streg_dest < 8);
-    DEBUG_STEPPING(*this);
     AB(0xDD);
     AB(0xD8 + streg_dest);
-    DEBUG_PRINT_INSTR(*this, w);
 }
 
 //
@@ -899,11 +820,9 @@ static void Xmul_reg_rm_(Assembler<WriterT> &a, WriterT &w, ModrmSib const &modr
 {
     assert(modrmsib.gp3264_registers_only() &&
            modrmsib.all_register_operands_have_size(RM_SIZE));
-    DEBUG_STEPPING(a);
     ABIFNZ(compute_rex(modrmsib, RM_SIZE));
     AZ("\x0F\xAF");
     write_modrmsib_disp(w, modrmsib);
-    DEBUG_PRINT_INSTR(a, w);
 }
 
 #define INST(name, rm_size) \
@@ -921,14 +840,10 @@ static void mul_dxax_rm_(Assembler<WriterT> &a, WriterT &w, ModrmSib modrmsib)
            modrmsib.gp3264_registers_only() &&
            modrmsib.all_register_operands_have_size(RM_SIZE));
     
-    DEBUG_STEPPING(a);
-
     ABIFNZ(compute_rex(modrmsib, RM_SIZE));
     AB(OPCODE);
     modrmsib.reg = EXTENSION;
     write_modrmsib_disp(w, modrmsib);
-
-    DEBUG_PRINT_INSTR(a, w);
 }
 
 #define INST(name, opcode, rm_size, extension)                  \
@@ -954,14 +869,10 @@ static void incdec_(Assembler<WriterT> &a, WriterT &w, ModrmSib modrmsib)
            modrmsib.gp3264_registers_only() &&
            modrmsib.all_register_operands_have_size(RM_SIZE));
 
-    DEBUG_STEPPING(a);
-
     ABIFNZ(compute_rex(modrmsib, RM_SIZE));
     modrmsib.reg = EXTENSION;
     AB(OPCODE);
     write_modrmsib_disp(w, modrmsib);
-
-    DEBUG_PRINT_INSTR(a, w);
 }
 
 #define INST(name, extension, opcode, rm_size)                      \
@@ -991,7 +902,6 @@ void Asm::Assembler<WriterT>::inc_reg64(Register reg) { inc_rm64(reg_1op(reg)); 
 template <class WriterT, uint8_t OPCODE_PREFIX, uint8_t OPCODE, class DispT, DispSize DISP_SIZE>
 static DispSetter<WriterT, typename DispT::IntType> XX_XX_rel_(Assembler<WriterT> &a, WriterT &w, DispT const &disp, BranchHint hint)
 {
-//    DEBUG_STEPPING(a);
     std::size_t instruction_size = 1 + DISP_SIZE;
 
     if (hint == BRANCH_HINT_TAKEN) {
@@ -1012,8 +922,6 @@ static DispSetter<WriterT, typename DispT::IntType> XX_XX_rel_(Assembler<WriterT
     std::size_t disp_position = w.size();
     typename DispT::IntType d = disp.get(instruction_size);
     w.a(reinterpret_cast<uint8_t *>(&d), DISP_SIZE);
-
-//    DEBUG_PRINT_INSTR(a, w);
 
     return DispSetter<WriterT, typename DispT::IntType>(w, instruction_size, disp_position);
 }
@@ -1042,17 +950,13 @@ INST2(js, 0x78) INST2(jz, 0x74)
 template <class WriterT>
 void Asm::Assembler<WriterT>::int3()
 {
-//    DEBUG_STEPPING(a);
     AB(0xCC);
-//    DEBUG_PRINT_INSTR(a, w);
 }
 template <class WriterT>
 void Asm::Assembler<WriterT>::int_imm8(uint8_t imm)
 {
-//    DEBUG_STEPPING(a);
     AB(0xCD);
     AB(imm);
-//    DEBUG_PRINT_INSTR(a, w);
 }
 
 
@@ -1064,12 +968,10 @@ template <class WriterT, class IntT, Size IntTSize>
 static DispSetter<WriterT, IntT> jmp_nr_relXX_(Assembler<WriterT> &a, WriterT &w, Disp<IntT> const &disp, BranchHint hint)
 {
     COMPILE_ASSERT(IntTSize == 4 || IntTSize == 1);
-//    DEBUG_STEPPING(a);
     AB(IntTSize == SIZE_8 ? 0xEB : 0xE9);
     std::size_t disp_position = w.size();
     IntT d = disp.get(1 + IntTSize);
     w.a(reinterpret_cast<uint8_t *>(&d), IntTSize);
-//    DEBUG_PRINT_INSTR(a, w);
     return DispSetter<WriterT, IntT>(w, 1 + IntTSize, disp_position);
 }
 
@@ -1085,12 +987,10 @@ template <class WriterT>
 void Asm::Assembler<WriterT>::jmp_nr_rm64(ModrmSib const &modrmsib_, BranchHint hint)
 {
     assert(! modrmsib_.has_reg_operand());
-//    DEBUG_STEPPING(*this);
     ModrmSib modrmsib = modrmsib_;
     modrmsib.reg = ESP/*4*/;
     AB(0xFF);
     write_modrmsib_disp(w, modrmsib);
-//    DEBUG_PRINT_INSTR(*this, w);
 }
 
 //
@@ -1100,11 +1000,9 @@ template <class WriterT>
 void Asm::Assembler<WriterT>::lea_reg_m(ModrmSib const &modrmsib)
 {
     assert(modrmsib.has_reg_operand());
-    DEBUG_STEPPING(*this);
     ABIFNZ(compute_rex(modrmsib, (Size)register_byte_size(modrmsib.reg)));
     AB(0x8D);
     write_modrmsib_disp(w, modrmsib);
-    DEBUG_PRINT_INSTR(*this, w);
 }
 
 
@@ -1114,9 +1012,7 @@ void Asm::Assembler<WriterT>::lea_reg_m(ModrmSib const &modrmsib)
 
 template <class WriterT>
 void Asm::Assembler<WriterT>::leave() {
-    DEBUG_STEPPING(*this);
     AB(0xC9);
-    DEBUG_PRINT_INSTR(*this, w);
 }
 
 //
@@ -1128,11 +1024,9 @@ static void mov_rm_reg_(Assembler<WriterT> &a, WriterT &w, ModrmSib const &modrm
 {
     assert(modrmsib.gp_registers_only() /*&&
                                           modrmsib.all_register_operands_have_size(RM_SIZE)*/);
-    DEBUG_STEPPING(a);
     ABIFNZ(compute_rex(modrmsib, RM_SIZE));
     AB(OPCODE);
     write_modrmsib_disp(w, modrmsib);
-    DEBUG_PRINT_INSTR(a, w);
 }
 
 #define INST(name, reversed, rm_size) \
@@ -1150,10 +1044,8 @@ INST(mov_reg_rm64, 0x8B, SIZE_64)
 template <class WriterT>
 void Asm::Assembler<WriterT>::mov_moffs64_rax(uint64_t addr)
 {
-    DEBUG_STEPPING(*this);
     AZ(REX_W_S "\xa3");
     A64(addr);
-    DEBUG_PRINT_INSTR(*this, w);
 }
 
 template <class WriterT, class ImmT, Size SIZE>
@@ -1161,11 +1053,9 @@ static void mov_reg_immX_(Assembler<WriterT> &a, WriterT &w, Register reg, ImmT 
 {
     assert(((SIZE == SIZE_32 && has_additive_code_32(reg)) ||
             (SIZE == SIZE_64 && has_additive_code_64(reg))));
-    DEBUG_STEPPING(a);
     ABIFNZ(compute_rex_for_reg(reg, SIZE));
     AB(0xB8 + register_code(reg));
     w.a(reinterpret_cast<uint8_t *>(&imm), SIZE);
-    DEBUG_PRINT_INSTR(a, w);
 }
 
 #define INST(name, immt, size) \
@@ -1183,13 +1073,11 @@ template <class WriterT, uint8_t FIRST_OPCODE_BYTE, uint8_t FINAL_OPCODE_BYTE>
 static void movdqa_(Assembler<WriterT> &a, WriterT &w, ModrmSib const &modrmsib)
 {
     assert(modrmsib.xmm_registers_only());
-    DEBUG_STEPPING(a);
     ABIFNZ(compute_rex(modrmsib, SIZE_128));
     AB(FIRST_OPCODE_BYTE);
     AB(0x0F);
     AB(FINAL_OPCODE_BYTE);
     write_modrmsib_disp(w, modrmsib);
-    DEBUG_PRINT_INSTR(a, w);
 }
 
 #define INST(name, first_opcode_byte, final_opcode_byte)     \
@@ -1206,12 +1094,10 @@ template <class WriterT, uint8_t FINAL_OPCODE_BYTE>
 static void movq_(Assembler<WriterT> &a, WriterT &w, ModrmSib const &modrmsib)
 {
     assert(modrmsib.mm_registers_only());
-    DEBUG_STEPPING(a);
     ABIFNZ(compute_rex(modrmsib, SIZE_128));
     AB(0x0F);
     AB(FINAL_OPCODE_BYTE);
     write_modrmsib_disp(w, modrmsib);
-    DEBUG_PRINT_INSTR(a, w);
 }
 
 #define INST(name, final_opcode_byte) \
@@ -1229,9 +1115,7 @@ INST(movq_mmm64_mm, 0x7F)
 template <class WriterT>
 void Asm::Assembler<WriterT>::nop()
 {
-    DEBUG_STEPPING(*this);
     AB(0x90);
-    DEBUG_PRINT_INSTR(*this, w);
 }
 
 //
@@ -1242,10 +1126,8 @@ template <class WriterT>
 void Asm::Assembler<WriterT>::pop_reg64(Register reg)
 {
     assert(has_additive_code_64(reg));
-    DEBUG_STEPPING(*this);
     ABIFNZ(compute_rex_for_reg(reg, SIZE_64, false));
     AB(0x58 + register_code(reg));
-    DEBUG_PRINT_INSTR(*this, w);
 }
 
 template <class WriterT>
@@ -1253,18 +1135,14 @@ void Asm::Assembler<WriterT>::push_reg64(Register reg)
 {
     assert(has_additive_code_64(reg));
 //    std::printf("\nHEX: %x %x\n\n", (int)compute_rex_for_reg(reg, SIZE_64, false), 0x50 + register_code(reg));
-    DEBUG_STEPPING(*this);
     ABIFNZ(compute_rex_for_reg(reg, SIZE_64, false));
     AB(0x50 + register_code(reg));
-    DEBUG_PRINT_INSTR(*this, w);
 }
 
 template <class WriterT, Size RM_SIZE, uint8_t OPCODE>
 static void push_rmX_(Assembler<WriterT> &a, WriterT &w, ModrmSib modrmsib)
 {
     assert(! modrmsib.has_reg_operand());
-
-    DEBUG_STEPPING(a);
 
     if (has_additive_code_64(modrmsib.simple_register())) {
         if (OPCODE == 0xFF)
@@ -1278,8 +1156,6 @@ static void push_rmX_(Assembler<WriterT> &a, WriterT &w, ModrmSib modrmsib)
         modrmsib.reg = ESI/*6*/;
         write_modrmsib_disp(w, modrmsib);
     }
-
-    DEBUG_PRINT_INSTR(a, w);
 }
 
 #define INST(name, rm_size, opcode) \
@@ -1293,10 +1169,8 @@ INST(pop_rm64, SIZE_64, 0x8F)
 template <class WriterT, class ImmT, Size ImmTSize, uint8_t OPCODE>
 static void push_imm_(Assembler<WriterT> &a, WriterT &w, ImmT imm)
 {
-    DEBUG_STEPPING(a);
     AB(OPCODE);
     w.a(reinterpret_cast<uint8_t *>(&imm), ImmTSize);
-    DEBUG_PRINT_INSTR(a, w);
 }
 #define INST(name, immt, immtsize, opcode) \
     template <class WriterT> \
@@ -1312,16 +1186,12 @@ INST(push_imm32, uint32_t, SIZE_32, 0x68)
 template <class WriterT>
 void Asm::Assembler<WriterT>::popf()
 {
-    DEBUG_STEPPING(*this);
     AB(0x9D);
-    DEBUG_PRINT_INSTR(*this, w);
 }
 template <class WriterT>
 void Asm::Assembler<WriterT>::pushf()
 {
-    DEBUG_STEPPING(*this);
     AB(0x9C);
-    DEBUG_PRINT_INSTR(*this, w);
 }
 
 //
@@ -1331,14 +1201,12 @@ template <class WriterT, Size SIZE>
 static void pxor_(Assembler<WriterT> &a, WriterT &w, ModrmSib const &modrmsib)
 {
     assert(modrmsib.xmm_registers_only());
-    DEBUG_STEPPING(a);
     ABIFNZ(compute_rex(modrmsib, SIZE, false));
     if (SIZE == SIZE_64)
         AZ("\x0F\xEF");
     else
         AZ("\x66\x0F\xEF");
     write_modrmsib_disp(w, modrmsib);
-    DEBUG_PRINT_INSTR(a, w);
 }
 
 #define INST(name, size) \
@@ -1356,9 +1224,7 @@ INST(pxor_mm_mmm128, SIZE_128)
 template <class WriterT>
 void Asm::Assembler<WriterT>::ret()
 {
-    DEBUG_STEPPING(*this);
     AB(0xc3);
-    DEBUG_PRINT_INSTR(*this, w);
 }
 
 #undef AB
@@ -1414,28 +1280,17 @@ void Asm::Assembler<WriterT>::emit_debug_print(char const *str)
 }
 
 template <class WriterT>
-void Asm::Assembler<WriterT>::emit_step_point()
+void Asm::Assembler<WriterT>::emit_toggle_single_step_onoff()
 {
-    emit_save_all_regs();
-
-    // Call printf.
-    mov_reg_imm64(RDI, PTR("Press return to step"));
-    mov_reg_imm64(RCX, PTR(std::printf));
-    mov_reg_imm32(EAX, 0);
-    call_rm64(reg_1op(RCX));
-
-    // Call 'getchar' until the user presses return.
-    std::size_t loop_begin = w.size();
-    mov_reg_imm64(RCX, PTR(std::getchar));
-    mov_reg_imm32(EAX, 0);
-    call_rm64(reg_1op(RCX));
-    cmp_rm64_imm8(reg_1op(RAX), '\n');
-    std::size_t loop_end = w.size();
-    jne_st_rel8(mkdisp(static_cast<int8_t>(loop_begin - loop_end), DISP_SUB_ISIZE));
-
-    emit_restore_all_regs();
+    push_rm64(reg_1op(RAX));
+    pushf();
+    pop_rm64(reg_1op(RAX));
+    xor_rm64_imm8(reg_1op(RAX), 0x80);
+    push_rm64(reg_1op(RAX));
+    popf();
+    pop_rm64(reg_1op(RAX));
 }
-#endif
+#endif DEBUG
 
 //
 // >>>>>>>>>> END OF INSTRUCTIONS >>>>>>>>>>

@@ -189,18 +189,10 @@ private:
     std::size_t disp_position;
 };
 
-#ifdef DEBUG
-extern bool DEBUG_STEP_BY_DEFAULT;
-#endif
 template <class WriterT>
 class Assembler {
 public:
-    Assembler(WriterT &writer) : w(writer)
-#ifdef DEBUG
-    ,debug_stepping(DEBUG_STEP_BY_DEFAULT)
-    ,last_instruction_offset(0)                               
-#endif
-   { }
+    Assembler(WriterT &writer) : w(writer) { }
 
     typedef DispSetter<WriterT, int8_t> StDispSetter;
     typedef DispSetter<WriterT, int32_t> NrDispSetter;
@@ -540,26 +532,14 @@ public:
     void xor_rm64_imm32(ModrmSib const &modrmsib, uint32_t src);
 
 #ifdef DEBUG
-    void start_debug_stepping() { debug_stepping = true; }
-    void stop_debug_stepping() { debug_stepping = false; }
-    bool debug_stepping_is_on() const { return debug_stepping; }
     void emit_save_all_regs();
     void emit_restore_all_regs();
     void emit_debug_print(char const *str);
-    void emit_step_point();
-
-    void store_last_instruction_offset() { last_instruction_offset = w.size(); }
-    std::size_t get_last_instruction_offset() { return last_instruction_offset; }
+    void emit_toggle_single_step_onoff();
 #endif
 
 private:
     WriterT &w;
-
-#ifdef DEBUG
-    bool debug_stepping;
-    std::vector<std::string> listing;
-    std::size_t last_instruction_offset;
-#endif
 };
 
 class VectorWriter {

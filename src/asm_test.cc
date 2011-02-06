@@ -385,10 +385,6 @@ after:
 //
 void test9()
 {
-    // Instruction encoding might not be the same when stepping is on.
-    if (DEBUG_STEP_BY_DEFAULT)
-        return;
-
     VectorWriter w;
     VectorAssembler a(w);
 
@@ -452,10 +448,6 @@ void test10()
 //
 void test11()
 {
-    // Instruction encoding might not be the same when stepping is on.
-    if (DEBUG_STEP_BY_DEFAULT)
-        return;
-
 #define A_DISPLACEMENT 0x08
 #define MODEQ(modrmsib, val) \
     do { \
@@ -558,8 +550,6 @@ void test11()
 
 int main()
 {
-    DEBUG_STEP_BY_DEFAULT = true;
-
     test1();
     test2();
     test3();
