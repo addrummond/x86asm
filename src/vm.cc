@@ -18,12 +18,7 @@
 //
 // * Those GP registers that AREN'T used to pass arguments according to the x86-64 ABI are
 //   are used as volatile scratch registers.
-// * All other registers, including R8-R15, are used to hold VM registers, with the exception
-//   of R12. R12 is not used because the x86-instruction encoding scheme treats it like RSP,
-//   which cannot be used as the base register for a memory access. Hence, using it to hold
-//   VM registers would be a pain, and unlikely to yield much performance increase, since
-//   the value of RSP would first have to be moved to another register before the contents of
-//   the VM register could be accessed.
+// * All other registers, including R8-R15, are used to hold VM registers.
 //
 
 using namespace Vm;
@@ -31,8 +26,8 @@ using namespace Vm;
 // When debugging, we want to check that register saving is working properly. Hence,
 // we use registers that need to be saved before using those that don't.
 #ifdef DEBUG
-const Asm::Register vm_regs_x86_regs[] = { Asm::R8, Asm::R9, Asm::R10, Asm::R11, Asm::RDI, /*Asm::R12,*/ Asm::R13, Asm::R14, Asm::R15, Asm::RCX  };
-const bool vm_regs_x86_regs_to_save[] =  { true,    true,    true,     true,     true,     /*false,*/    false,    false,    false,    true };
+const Asm::Register vm_regs_x86_regs[] = { Asm::R8, Asm::R9, Asm::R10, Asm::R11, Asm::RDI, Asm::R12, Asm::R13, Asm::R14, Asm::R15, Asm::RCX  };
+const bool vm_regs_x86_regs_to_save[] =  { true,    true,    true,     true,     true,     false,    false,    false,    false,    true };
 #else
 //const Asm::Register vm_regs_x86_regs[] = { /*Asm::R12,*/ Asm::R13, Asm::R14, Asm::R15, Asm::R8, Asm::R9, Asm::R10, Asm::R11, Asm::RCX, Asm::RDI };
 //const bool vm_regs_x86_regs_to_save[] =  { /*false,*/    false,    false,    false,    true,    true,    true,     true,     true,     true     };
@@ -673,16 +668,17 @@ template <class WriterT>
 static void emit_cmp(Asm::Assembler<WriterT> &a, RegId op1, RegId op2)
 {
     using namespace Asm;
-    Register r1 = move_vmreg_ptr_to_x86reg(a, RDX, op1);
-    Register r2 = move_vmreg_ptr_to_x86reg(a, RBX, op2);
-    a.mov_reg_rm64(mem_2op(RAX, r2));
+    Register r1 = move_vmreg_ptr_to_x86reg(a, SCRATCH_REG(RDX), op1);
+    Register r2 = move_vmreg_ptr_to_x86reg(a, SCRATCH_REG(RBX), op2);
+    std::printf("RRRRR: %s %s\n", register_name(r1), register_name(r2));
+    a.mov_reg_rm64(mem_2op(SCRATCH_REG(RAX), r2));
     a.cmp_rm64_reg(mem_2op(RAX, r1));
 }
 
 static void type_error_handler(MainLoopState &mls)
 {
     std::printf("\n\n*** TYPE ERROR ***\n\n");
-    std::exit(1);
+//    std::exit(1);
 }
 // The main purpose of this is to generate a function with a reference to the main loop
 // state 'baked' in. This means that the tag-checking code doesn't have to pass this
@@ -694,8 +690,8 @@ static boost::shared_ptr<WriterT> gen_type_error_handler_asm(MainLoopState const
     boost::shared_ptr<WriterT> w(new WriterT);
     Asm::Assembler<WriterT> a(*w);
 
-//    a.push_reg64(RBP); // Function preamble.
-//    a.mov_reg_reg64(RBP, RSP);
+    a.push_reg64(RBP);
+    a.mov_reg_reg64(RBP, RSP);
 
     save_regs_before_c_funcall(mls, a);
     a.mov_reg_imm64(RDI, PTR(&mls));
@@ -705,8 +701,8 @@ static boost::shared_ptr<WriterT> gen_type_error_handler_asm(MainLoopState const
     // Won't actually get here.
     restore_regs_after_c_funcall(mls, a);
 
-///    a.leave();
-//    a.ret();
+    a.leave();
+    a.ret();
 
     return w;
 }
@@ -725,10 +721,11 @@ static void check_tag(MainLoopState const &mls, Asm::Assembler<WriterT> &a, Writ
 //    debug_print_x86reg64(mls, a, scratch_reg, "REGV: ");
     typename Asm::Assembler<WriterT>::StDispSetter ds = a.jne_st_rel8(0); // Going to fill this in in a minute.
     std::size_t byte = w.size();
+    a.mov_reg_imm32(EAX, 0); // Probably not necessary -- remove at some point.
     a.mov_reg_imm64(scratch_reg, mls.type_error_handler_asm->get_start_addr());
-    a.jmp_nr_rm64(reg_1op(scratch_reg));
+    a.call_rm64(reg_1op(scratch_reg));
     std::size_t af = w.size();
-    std::printf("SIZE %li\n", af - byte);
+//    std::printf("SIZE %li\n", af - byte);
     ds.set(af - byte);
 }
 
