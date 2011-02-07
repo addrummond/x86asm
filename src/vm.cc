@@ -41,7 +41,7 @@ const unsigned Vm::MAX_REG_ID = 127 + 4;
 const unsigned MAX_VM_REGS = MAX_REG_ID-1;
 
 #ifdef DEBUG
-#   define SCRATCH_REG(r) (assert((r) == RAX || (r) == RBX || (r) == RDX || (r) == RSI), r)
+#   define SCRATCH_REG(r) (assert((r) == Asm::RAX || (r) == Asm::RBX || (r) == Asm::RDX || (r) == Asm::RSI), r)
 #else
 #   define SCRATCH_REG(r) (r)
 #endif
@@ -610,17 +610,27 @@ static void debug_print_x86reg64(MainLoopState const &mls, Asm::Assembler<Writer
 {
     using namespace Asm;
 
+    a.pushf();
+    a.push_reg64(RAX);
+    a.push_reg64(RSI);
+    a.push_reg64(RDI);
+    a.push_reg64(RCX);
     save_regs_before_c_funcall(mls, a);
-    if (r != RDX)
-        a.mov_reg_reg64(RDX, r); // Second argument to printf.
+    if (r != RSI)
+        a.mov_reg_reg64(RSI, r); // Second argument to printf.
     a.mov_reg_imm64(RDI, PTR(preamble)); // First argument to printf.
     a.mov_reg_imm64(RCX, PTR(myprint));
     a.call_rm64(reg_1op(RCX));
     restore_regs_after_c_funcall(mls, a);
+    a.pop_reg64(RCX);
+    a.pop_reg64(RDI);
+    a.pop_reg64(RSI);
+    a.pop_reg64(RAX);
+    a.popf();
 }
 
-static void *call_alloc_tagged_mem(Mem::MemState &ms, std::size_t size, unsigned tag, unsigned second_tag)
-{ ms.alloc_tagged_mem(size, tag, second_tag); }
+static Mem::MemState::Allocation call_alloc_tagged_mem(Mem::MemState &ms, std::size_t size, unsigned tag, unsigned second_tag)
+{ SCRATCH_REG(Asm::RAX); SCRATCH_REG(Asm::RDX); return ms.alloc_tagged_mem(size, tag, second_tag); }
 // Emit code to allocate tagged memory.
 // Leaves address (untagged) in RAX and tagged in RDX. (This
 // is how the Mem::MemState::Allocation structure is returned according
@@ -637,9 +647,13 @@ static void emit_alloc_tagged_mem(MainLoopState const &mls, Asm::Assembler<Write
     a.mov_reg_imm64(RSI, static_cast<uint64_t>(size));
     a.mov_reg_imm64(RDX, static_cast<uint64_t>(tag));
     a.mov_reg_imm64(RCX, static_cast<uint64_t>(second_tag));
-    a.mov_reg_imm64(RAX, 0);
+    a.mov_reg_imm32(EAX, 0);
     a.mov_reg_imm64(RBX, PTR(call_alloc_tagged_mem));
     a.call_rm64(reg_1op(RBX));
+    debug_print_x86reg64(mls, a, RAX, "- RAX: ");
+    debug_print_x86reg64(mls, a, RDX, "- RDX: ");
+    debug_print_x86reg64(mls, a, RAX, "RAX: ");
+    debug_print_x86reg64(mls, a, RDX, "RDX: ");
     restore_regs_after_c_funcall(mls, a);
     move_x86reg_to_vmreg_ptr(a, ptr_dest, RDX);
 }
@@ -660,7 +674,7 @@ static void emit_ldi(MainLoopState const &mls, Asm::Assembler<WriterT> &a, RegId
 {
     using namespace Asm;
     emit_alloc_tagged_mem(mls, a, 8, ptr_dest, TAG_INT, 0); // Leaves untagged address in RAX.
-    a.mov_reg_imm64(RBX, val);
+    a.mov_reg_imm64(SCRATCH_REG(RBX), val);
     a.mov_rm64_reg(mem_2op(RBX, RAX));
 }
 
@@ -678,7 +692,7 @@ static void emit_cmp(Asm::Assembler<WriterT> &a, RegId op1, RegId op2)
 static void type_error_handler(MainLoopState &mls)
 {
     std::printf("\n\n*** TYPE ERROR ***\n\n");
-//    std::exit(1);
+    std::exit(1);
 }
 // The main purpose of this is to generate a function with a reference to the main loop
 // state 'baked' in. This means that the tag-checking code doesn't have to pass this
@@ -1027,7 +1041,7 @@ static void emit_debug_printreg(MainLoopState const &mls, Asm::Assembler<WriterT
     a.mov_reg_imm32(EDI, static_cast<uint32_t>(r));
     move_vmreg_ptr_to_guaranteed_x86reg_following_save(mls, a, RSI, r);
     a.mov_reg_imm64(RBX, PTR(print_vm_reg));
-    a.mov_reg_imm64(RAX, 0);
+    a.mov_reg_imm32(EAX, 0);
     a.call_rm64(reg_1op(RBX));
     restore_regs_after_c_funcall(mls, a);
 }
