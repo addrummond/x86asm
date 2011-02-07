@@ -147,12 +147,6 @@ RawModrmSib Asm::raw_modrmsib(ModrmSib const &modrmsib)
     // Set reg.
     reg = (modrmsib.reg != NOT_A_REGISTER ? register_code(modrmsib.reg) : 0);
 
-//    std::printf("MOD %x RM %x REG %x\n", mod, rm, reg);
-    // According to the x86 manuals, there's a weird gap in the licitly encodable instructions here:
-    // [UPDATE] Hmm, or maybe it's just a typographical error? The font in the modrm table is smaller in the relevant
-    // cell but it still contains 8 values, on closer inspection.
-//    assert(! (mod == 1 && (rm == 6 || rm == 7) && reg == 2));
-
     r.modrm = raw_modrm(mod, rm, reg);
 
     // Add SIB if required.
