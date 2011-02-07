@@ -610,23 +610,13 @@ static void debug_print_x86reg64(MainLoopState const &mls, Asm::Assembler<Writer
 {
     using namespace Asm;
 
-    a.pushf();
-    a.push_reg64(RAX);
-    a.push_reg64(RSI);
-    a.push_reg64(RDI);
-    a.push_reg64(RCX);
-    save_regs_before_c_funcall(mls, a);
+    a.emit_save_all_regs();
     if (r != RSI)
         a.mov_reg_reg64(RSI, r); // Second argument to printf.
     a.mov_reg_imm64(RDI, PTR(preamble)); // First argument to printf.
     a.mov_reg_imm64(RCX, PTR(myprint));
     a.call_rm64(reg_1op(RCX));
-    restore_regs_after_c_funcall(mls, a);
-    a.pop_reg64(RCX);
-    a.pop_reg64(RDI);
-    a.pop_reg64(RSI);
-    a.pop_reg64(RAX);
-    a.popf();
+    a.emit_restore_all_regs();
 }
 
 static Mem::MemState::Allocation call_alloc_tagged_mem(Mem::MemState &ms, std::size_t size, unsigned tag, unsigned second_tag)
