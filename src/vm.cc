@@ -512,8 +512,9 @@ static void move_x86reg_to_vmreg_ptr(Asm::Assembler<WriterT> &a, RegId vmreg, As
 {
     using namespace Asm;
     if (vmreg <= NUM_VM_REGS_IN_X86_REGS) {
-        if (x86reg != vm_regs_x86_regs[vmreg-1])
+        if (x86reg != vm_regs_x86_regs[vmreg-1]) {
             a.mov_reg_reg64(vm_regs_x86_regs[vmreg-1], x86reg);
+        }
     }
     else
         a.mov_rm64_reg(mem_2op_short(x86reg, RBP, NOT_A_REGISTER/*index*/, SCALE_1, RegId_to_disp(vmreg)));
@@ -530,65 +531,17 @@ static Asm::Register move_vmreg_ptr_to_x86reg(Asm::Assembler<WriterT> &a, Asm::R
 }
 
 template <class WriterT>
-static void move_vmreg_ptr_to_guaranteed_x86reg(Asm::Assembler<WriterT> &a, Asm::Register x86reg, RegId vmreg)
+static void move_vmreg_ptr_to_guaranteed_x86reg(Asm::Assembler<WriterT> &a, Asm::Register x86reg, RegId vmreg, std::size_t stack_offset=0)
 {
     using namespace Asm;
-
     assert(vmreg > 0);
     if (vmreg <= NUM_VM_REGS_IN_X86_REGS) {
-        if (x86reg != vm_regs_x86_regs[vmreg-1])
+        if (x86reg != vm_regs_x86_regs[vmreg-1]) {
             a.mov_reg_reg64(x86reg, vm_regs_x86_regs[vmreg-1]);
-    }
-    else
-        a.mov_reg_rm64(mem_2op_short(x86reg, RBP, NOT_A_REGISTER/*index*/, SCALE_1, RegId_to_disp(vmreg)));
-}
-
-static int is_saved_before_c_funcall(Asm::Register reg)
-{
-    using namespace Asm;
-
-    int saved_count = 0;
-    int i = 0;
-    for (i = 0; i < NUM_VM_REGS_IN_X86_REGS; ++i) {
-        if (reg == vm_regs_x86_regs[i]) {
-            return vm_regs_x86_regs_to_save[i] ? saved_count : -1;
         }
-        if (vm_regs_x86_regs_to_save[i])
-            ++saved_count;
-    }
-    assert(false);
-}
-
-template <class WriterT>
-static void move_vmreg_ptr_to_guaranteed_x86reg_following_save(MainLoopState const &mls, Asm::Assembler<WriterT> &a, Asm::Register x86reg, RegId vmreg)
-{
-    using namespace Asm;
-
-    unsigned regs_saved = 0;
-    for (int i = 0; i < NUM_VM_REGS_IN_X86_REGS && i < mls.current_num_vm_registers; ++i) {
-        if (vm_regs_x86_regs_to_save[i])
-            ++regs_saved;
-    }
-
-    if (! vm_reg_is_in_x86_reg(vmreg)) {
-        move_vmreg_ptr_to_guaranteed_x86reg(a, x86reg, vmreg);
     }
     else {
-        Register x86_reg_for_vmreg = vm_regs_x86_regs[vmreg-1];
-        int saved_count = is_saved_before_c_funcall(x86_reg_for_vmreg);
-        if (saved_count == -1) {
-            move_vmreg_ptr_to_guaranteed_x86reg(a, x86reg, vmreg);
-        }
-        else {
-            assert(regs_saved - saved_count >= 0);
-            int offset = ((regs_saved - saved_count - 1) * 8);
-            assert(offset <= 127);
-            a.mov_reg_reg64(RBX, RSP); // x86 instruction encoding quirk -- can't specify memory
-                                       // location relative to RSP. We don't want to move RSP
-                                       // into RBP as usual, because RBP is still holding our
-                                       // "real" base pointer.
-            a.mov_reg_rm64(mem_2op_short(x86reg, RBX, NOT_A_REGISTER/*index*/, SCALE_1, offset));
-        }
+        a.mov_reg_rm64(mem_2op_short(x86reg, RBP, NOT_A_REGISTER/*index*/, SCALE_1, RegId_to_disp(vmreg) + stack_offset));
     }
 }
 
@@ -606,7 +559,7 @@ static void myprint(char const *preamble, uint64_t value)
     std::printf("%s%llx\n", preamble, value);
 }
 template <class WriterT>
-static void debug_print_x86reg64(MainLoopState const &mls, Asm::Assembler<WriterT> &a, Asm::Register r, const char *preamble)
+static void debug_print_x86reg64(Asm::Assembler<WriterT> &a, Asm::Register r, const char *preamble)
 {
     using namespace Asm;
 
@@ -640,10 +593,6 @@ static void emit_alloc_tagged_mem(MainLoopState const &mls, Asm::Assembler<Write
     a.mov_reg_imm32(EAX, 0);
     a.mov_reg_imm64(RBX, PTR(call_alloc_tagged_mem));
     a.call_rm64(reg_1op(RBX));
-    debug_print_x86reg64(mls, a, RAX, "- RAX: ");
-    debug_print_x86reg64(mls, a, RDX, "- RDX: ");
-    debug_print_x86reg64(mls, a, RAX, "RAX: ");
-    debug_print_x86reg64(mls, a, RDX, "RDX: ");
     restore_regs_after_c_funcall(mls, a);
     move_x86reg_to_vmreg_ptr(a, ptr_dest, RDX);
 }
@@ -674,7 +623,6 @@ static void emit_cmp(Asm::Assembler<WriterT> &a, RegId op1, RegId op2)
     using namespace Asm;
     Register r1 = move_vmreg_ptr_to_x86reg(a, SCRATCH_REG(RDX), op1);
     Register r2 = move_vmreg_ptr_to_x86reg(a, SCRATCH_REG(RBX), op2);
-    std::printf("RRRRR: %s %s\n", register_name(r1), register_name(r2));
     a.mov_reg_rm64(mem_2op(SCRATCH_REG(RAX), r2));
     a.cmp_rm64_reg(mem_2op(RAX, r1));
 }
@@ -721,8 +669,8 @@ static void check_tag(MainLoopState const &mls, Asm::Assembler<WriterT> &a, Writ
     a.mov_reg_rm64(reg_2op(scratch_reg, x86reg));
     a.and_rm64_imm8(reg_1op(scratch_reg), (uint8_t)TAG_MASK);
     a.cmp_rm64_imm8(reg_1op(scratch_reg), (uint8_t)expected_tag_value);
-//    debug_print_x86reg64(mls, a, x86reg, "RRRR: ");
-//    debug_print_x86reg64(mls, a, scratch_reg, "REGV: ");
+//    debug_print_x86reg64(a, x86reg, "RRRR: ");
+//    debug_print_x86reg64(a, scratch_reg, "REGV: ");
     typename Asm::Assembler<WriterT>::StDispSetter ds = a.jne_st_rel8(0); // Going to fill this in in a minute.
     std::size_t byte = w.size();
     a.mov_reg_imm32(EAX, 0); // Probably not necessary -- remove at some point.
@@ -843,23 +791,28 @@ static void restore_all_regs(Asm::Assembler<WriterT> &a, SavedRegisters &saved, 
 // Save those registers which
 //     (i)  belong to the caller according to the X86-64 ABI.
 //     (ii) are used to hold VM registers.
+// Returns the number of bytes pushed onto the stack.
 template <class WriterT>
-static void save_regs_before_c_funcall(MainLoopState const &mls, Asm::Assembler<WriterT> &a)
+static std::size_t save_regs_before_c_funcall(MainLoopState const &mls, Asm::Assembler<WriterT> &a)
 {
 //    a.emit_save_all_regs();
 //    return;
 
     using namespace Asm;
+    std::size_t stack_space_used;
     for (int i = 0; i < NUM_VM_REGS_IN_X86_REGS && i < mls.current_num_vm_registers; ++i) {
 //  for (int i = 0; i < sizeof(vm_regs_x86_regs) / sizeof(Register); ++i) {
         if (vm_regs_x86_regs_to_save[i]) {
 //      if (true) {
             Register r = vm_regs_x86_regs[i];
             a.push_rm64(reg_1op(r));
+            stack_space_used += 8;
 //          std::printf("SAVED %s\n", register_name(r));
         }
     }
     a.pushf();
+
+    return stack_space_used;
 }
 template <class WriterT>
 static void restore_regs_after_c_funcall(MainLoopState const &mls, Asm::Assembler<WriterT> &a)
@@ -1027,9 +980,9 @@ static void emit_debug_printreg(MainLoopState const &mls, Asm::Assembler<WriterT
 {
     using namespace Asm;
 
-    save_regs_before_c_funcall(mls, a);
+    std::size_t offset = save_regs_before_c_funcall(mls, a);
     a.mov_reg_imm32(EDI, static_cast<uint32_t>(r));
-    move_vmreg_ptr_to_guaranteed_x86reg_following_save(mls, a, RSI, r);
+    move_vmreg_ptr_to_guaranteed_x86reg(a, RSI, r, offset);
     a.mov_reg_imm64(RBX, PTR(print_vm_reg));
     a.mov_reg_imm32(EAX, 0);
     a.call_rm64(reg_1op(RBX));
