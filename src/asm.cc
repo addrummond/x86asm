@@ -1271,7 +1271,7 @@ void Asm::Assembler<WriterT>::emit_save_all_regs()
         push_rm64(reg_1op(static_cast<Register>(i)));
     }
     // Push all XMM registers.
-    mov_reg_rm64(reg_2op(RCX, RSP)); // Can't use RSP as base reg owing to weird x86 instruction encoding.
+    mov_reg_rm64(reg_2op(RCX, RSP)); // TODO: Not really necessary (could index from RSP directly).
     sub_rm64_imm32(reg_1op(RSP), 16*16); // Space for 16 16-byte registers.
     for (int i = XMM0; i <= XMM15; ++i) {
         movdqu_mmm128_mm(mem_2op(static_cast<Register>(i)/*reg*/, RCX/*base*/, NOT_A_REGISTER/*index*/, SCALE_1, (i-XMM0+1)*-16));
@@ -1282,9 +1282,8 @@ template <class WriterT>
 void Asm::Assembler<WriterT>::emit_restore_all_regs()
 {
     // Restore saved registers.
-    mov_reg_rm64(reg_2op(RCX, RSP)); // Can't use RSP as base reg owing to weird x86 instruction encoding.    
     for (int i = XMM15; i >= XMM0; --i) {
-        movdqu_mm_mmm128(mem_2op(static_cast<Register>(i)/*reg*/, RCX/*base*/, NOT_A_REGISTER/*index*/, SCALE_1, (XMM15-i)*16));
+        movdqu_mm_mmm128(mem_2op(static_cast<Register>(i)/*reg*/, RSP/*base*/, NOT_A_REGISTER/*index*/, SCALE_1, (XMM15-i)*16));
     }
     add_rm64_imm32(reg_1op(RSP), 16*16);
     for (int i = R15; i >= RAX; --i) {
