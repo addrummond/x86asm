@@ -579,6 +579,23 @@ void test11()
     std::printf("\nTEST 11\n* OK\n\n");
 }
 
+//
+// This should eventually be part of test 11.
+//
+void test12()
+{
+    VectorWriter w;
+    VectorAssembler a(w);
+
+    a.mov_reg_rm64(mem_2op(RAX, RSP));
+    a.mov_rm64_reg(mem_2op(RAX, RSP));
+    std::string hex;
+    w.canonical_hex(hex);
+    std::printf("TEST 12: HEX: %s\n", hex.c_str());
+    assert(hex == "48 8b 04 24 48 89 04 24");
+    std::printf("* OK\n\n");
+}
+
 int main()
 {
 #ifdef DO_DEBUG_STEPPING
@@ -596,6 +613,7 @@ int main()
     test9();
     test10();
     test11();
+    test12();
 
 #ifdef DO_DEBUG_STEPPING
     // This isn't actually necessary here; it's just to test this function.

@@ -94,7 +94,8 @@ static bool requires_sib(ModrmSib const &modrmsib)
 {
 //    return !(modrmsib.disp_size == DISP_SIZE_NONE || /*modrmsib.scale == SCALE_1 ||*/ modrmsib.rm_reg == NOT_A_REGISTER);
     return (modrmsib.base_reg != NOT_A_REGISTER ||
-            (modrmsib.disp_size != DISP_SIZE_NONE && modrmsib.disp != 0));
+            (modrmsib.disp_size != DISP_SIZE_NONE &&
+             (modrmsib.disp != 0 || reg_is_forbidden_in_rm(modrmsib.rm_reg))));
 }
 
 bool Asm::reg_is_forbidden_in_rm(Register reg)
