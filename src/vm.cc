@@ -66,6 +66,7 @@ static char const *op_names[] = {
     "JL",
     "CJL",
     "IADD",
+    "ISUB",
     "IMUL",
     "IDIV",
     "MKIVEC0",
@@ -100,6 +101,7 @@ static Operand const op_operand_specs[][4] = {
     { OPR_IMM16, END },                          // CJL
 
     { OPR_REGISTER, OPR_REGISTER, END },         // IADD
+    { OPR_REGISTER, OPR_REGISTER, END },         // ISUB
     { OPR_REGISTER, OPR_REGISTER, END },         // IMUL
     { OPR_REGISTER, OPR_REGISTER, END },         // IDIV
 
@@ -682,21 +684,26 @@ static void check_tag(MainLoopState const &mls, Asm::Assembler<WriterT> &a, Writ
     ds.set(af - byte);
 }
 
-template <class WriterT>
-static void emit_iadd(MainLoopState const &mls, Asm::Assembler<WriterT> &a, WriterT &w, RegId r_dest, RegId r_src)
-{
-    using namespace Asm;
-    Register r1 = move_vmreg_ptr_to_x86reg(a, RDX, r_dest);
-    Register r2 = move_vmreg_ptr_to_x86reg(a, RBX, r_src);
-
-    // Check that the values are integers.
-    check_tag(mls, a, w, r1, TAG_INT, SCRATCH_REG(RSI));
-    check_tag(mls, a, w, r2, TAG_INT, SCRATCH_REG(RSI));
-
-    a.mov_reg_rm64(mem_2op(RAX, r1));
-    a.add_reg_rm64(mem_2op(RAX, r2));
-    a.mov_rm64_reg(mem_2op(RAX, r1));
-}
+// Can't see any reasonable way of doing this using templates.
+#define EMIT_IBINARITH(name, code) \
+    template <class WriterT> \
+    static void name(MainLoopState const &mls, Asm::Assembler<WriterT> &a, WriterT &w, RegId r_dest, RegId r_src) \
+    { \
+        using namespace Asm; \
+        Register r1 = move_vmreg_ptr_to_x86reg(a, RDX, r_dest); \
+        Register r2 = move_vmreg_ptr_to_x86reg(a, RBX, r_src); \
+    \
+        check_tag(mls, a, w, r1, TAG_INT, SCRATCH_REG(RSI)); \
+        check_tag(mls, a, w, r2, TAG_INT, SCRATCH_REG(RSI)); \
+    \
+        a.mov_reg_rm64(mem_2op(RAX, r1)); \
+        code; \
+        a.mov_rm64_reg(mem_2op(RAX, r1)); \
+    }
+EMIT_IBINARITH(emit_iadd, a.add_reg_rm64(mem_2op(RAX, r2)))
+EMIT_IBINARITH(emit_isub, a.sub_reg_rm64(mem_2op(RAX, r2)))
+EMIT_IBINARITH(emit_imul, a.imul_reg_rm64(mem_2op(RAX, r2)))
+#undef IEMIT_BINARITH
 
 template <class WriterT>
 static void emit_exit(MainLoopState const &mls, Asm::Assembler<WriterT> &a, RegId retreg)
@@ -1164,6 +1171,12 @@ static uint64_t inner_main_loop(MainLoopState &mls)
             } break;
             case OP_IADD: {
                 emit_iadd(mls, *a, *w, i[1], i[2]);
+            } break;
+            case OP_ISUB: {
+                emit_isub(mls, *a, *w, i[1], i[2]);
+            } break;
+            case OP_IMUL: {
+                emit_imul(mls, *a, *w, i[1], i[2]);
             } break;
             case OP_DEBUG_PRINTREG: {
                 emit_debug_printreg(mls, *a, i[1]);

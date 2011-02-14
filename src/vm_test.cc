@@ -181,6 +181,26 @@ void test6()
      std::printf("* OK\n\n");
 }
 
+void test7()
+{
+    char const *code =
+        " INCRW 3"
+        " LDI16 1 2"
+        " LDI16 2 3"
+        " LDI16 3 4"
+        " IADD 2 3"
+        " IMUL 1 2"
+        " ISUB 1 3"
+        " EXIT 1";
+
+    uint64_t rval = test_code(code, 100);
+    assert(rval != 0);
+    uint64_t rvali = *((uint64_t*)rval);
+    std::printf("TEST 7: rval=%lli\b", rvali);
+    assert(rvali == 10);
+    std::printf("* OK\n\n");
+}
+
 int main()
 {
     test1();
@@ -189,6 +209,7 @@ int main()
     test4();
     test5();
     test6();
+    test7();
 
     return 0;
 }

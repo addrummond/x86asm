@@ -34,17 +34,18 @@ enum Opcode {
     OP_CJL     = 18,
 
     OP_IADD    = 19,
-    OP_IMUL    = 20,
-    OP_IDIV    = 21,
+    OP_ISUB    = 20,
+    OP_IMUL    = 21,
+    OP_IDIV    = 22,
 
-    OP_MKIVEC0  = 22,
-    OP_MKIVECD  = 23,
-    OP_MKIVEC   = 24,
-    OP_REFIVEC  = 25,
-    OP_SETIVEC  = 26,
+    OP_MKIVEC0  = 23,
+    OP_MKIVECD  = 24,
+    OP_MKIVEC   = 25,
+    OP_REFIVEC  = 26,
+    OP_SETIVEC  = 27,
 
-    OP_DEBUG_PRINTREG = 27,
-    OP_DEBUG_SAYHI = 28
+    OP_DEBUG_PRINTREG = 28,
+    OP_DEBUG_SAYHI = 29
 };
 extern const Opcode FIRST_OP;
 
