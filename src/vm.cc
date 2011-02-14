@@ -990,8 +990,8 @@ static void emit_debug_printreg(MainLoopState const &mls, Asm::Assembler<WriterT
     using namespace Asm;
 
     std::size_t offset = save_regs_before_c_funcall(mls, a);
-    a.mov_reg_imm32(EDI, static_cast<uint32_t>(r));
     move_vmreg_ptr_to_guaranteed_x86reg(a, RSI, r, offset);
+    a.mov_reg_imm32(EDI, static_cast<uint32_t>(r));
     a.mov_reg_imm64(RBX, PTR(print_vm_reg));
     a.mov_reg_imm32(EAX, 0);
     a.call_rm64(reg_1op(RBX));

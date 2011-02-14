@@ -56,6 +56,7 @@ void test2()
         " LDI64 1 2"
         " DEBUG_PRINTREG 1"
         " LDI16 2 3"
+        " DEBUG_PRINTREG 2"
         " IADD 1 2"
         " DEBUG_PRINTREG 1"
         " EXIT 1"
