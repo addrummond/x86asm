@@ -506,7 +506,7 @@ static int8_t RegId_to_disp(RegId id)
     return (id-NUM_VM_REGS_IN_X86_REGS-1) * 8;
 }
 
-static bool vm_reg_is_in_x86_reg(RegId id)
+static bool vm_reg_is_in_x86reg(RegId id)
 {
     assert(id <= MAX_REG_ID);
     return id <= NUM_VM_REGS_IN_X86_REGS;
@@ -969,10 +969,18 @@ static void emit_refvec(MainLoopState const &mls, Asm::Assembler<WriterT> &a, Re
 static void print_vm_reg(RegId rid, uint64_t tagged_ptr)
 {
     uint64_t tag = tagged_ptr & TAG_MASK;
-    std::printf("- REGISTER %i\n- TAG      %lli (%s)\n", (int)rid, tag, tag_name(tag));
+    std::printf("- REGISTER: %i\n- TAG:      %lli (%s)\n", (int)rid, tag, tag_name(tag));
+    std::printf("- STORAGE:  ");
+    if (vm_reg_is_in_x86reg(rid)) {
+        std::printf("x86 reg %s\n", Asm::register_name(RegId_to_x86reg(rid)));
+    }
+    else {
+        std::printf("mem at disp 0x%x\n", static_cast<int>(RegId_to_disp(rid)));
+    }
+
     if (tag == TAG_INT) {
-        std::printf("- PTR:     0x%llx\n", (unsigned long long)tagged_ptr);
-        std::printf("- VALUE:   %lli\n\n", *((long long *)(tagged_ptr & 0xFFFFFFFFFFFFFFFC)));
+        std::printf("- PTR:      0x%llx\n", (unsigned long long)tagged_ptr);
+        std::printf("- VALUE:    %lli\n\n", *((long long *)(tagged_ptr & 0xFFFFFFFFFFFFFFFC)));
     }
     else assert(false);
 }
