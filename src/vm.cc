@@ -495,6 +495,11 @@ Vm::VectorAssemblerBroker::Entry const *Vm::VectorAssemblerBroker::known_to_be_l
         return NULL;
 }
 
+static Asm::Register RegId_to_x86reg(RegId id)
+{
+    assert(id <= NUM_VM_REGS_IN_X86_REGS);
+    return vm_regs_x86_regs[id-1];
+}
 static int8_t RegId_to_disp(RegId id)
 {
     assert(id <= MAX_REG_ID && id > NUM_VM_REGS_IN_X86_REGS);
@@ -512,8 +517,8 @@ static void move_x86reg_to_vmreg_ptr(Asm::Assembler<WriterT> &a, RegId vmreg, As
 {
     using namespace Asm;
     if (vmreg <= NUM_VM_REGS_IN_X86_REGS) {
-        if (x86reg != vm_regs_x86_regs[vmreg-1]) {
-            a.mov_reg_reg64(vm_regs_x86_regs[vmreg-1], x86reg);
+        if (x86reg != RegId_to_x86reg(vmreg)) {
+            a.mov_reg_reg64(RegId_to_x86reg(vmreg), x86reg);
         }
     }
     else
@@ -525,7 +530,7 @@ static Asm::Register move_vmreg_ptr_to_x86reg(Asm::Assembler<WriterT> &a, Asm::R
 {
     using namespace Asm;
     if (vmreg <= NUM_VM_REGS_IN_X86_REGS)
-        return vm_regs_x86_regs[vmreg-1];
+        return RegId_to_x86reg(vmreg);
     a.mov_reg_rm64(mem_2op_short(x86reg, RBP, NOT_A_REGISTER/*index*/, SCALE_1, RegId_to_disp(vmreg)));
     return x86reg;
 }
@@ -536,8 +541,8 @@ static void move_vmreg_ptr_to_guaranteed_x86reg(Asm::Assembler<WriterT> &a, Asm:
     using namespace Asm;
     assert(vmreg > 0);
     if (vmreg <= NUM_VM_REGS_IN_X86_REGS) {
-        if (x86reg != vm_regs_x86_regs[vmreg-1]) {
-            a.mov_reg_reg64(x86reg, vm_regs_x86_regs[vmreg-1]);
+        if (x86reg != RegId_to_x86reg(vmreg)) {
+            a.mov_reg_reg64(x86reg, RegId_to_x86reg(vmreg));
         }
     }
     else {
