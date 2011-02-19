@@ -496,8 +496,8 @@ template <class WriterT, Size RM_SIZE, class ImmT, Size IMM_SIZE, uint8_t SIMPLE
 static void add_rmXX_imm32_(Assembler<WriterT> &a, WriterT &w, ModrmSib modrmsib, ImmT src)
 {
     assert((! modrmsib.has_reg_operand()) &&
-           modrmsib.gp3264_registers_only() /*&&
-           modrmsib.all_register_operands_have_size(RM_SIZE)*/);
+           modrmsib.gp3264_registers_only() &&
+           modrmsib.all_register_operands_have_size(RM_SIZE));
 
     if (SIMPLE_OPCODE && modrmsib.simple_register() == EAX) {
         assert(RM_SIZE == SIZE_32);

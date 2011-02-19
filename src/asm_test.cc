@@ -596,6 +596,31 @@ void test12()
     std::printf("* OK\n\n");
 }
 
+//
+// Random test constructed during debugging.
+//
+void test13()
+{
+    VectorWriter w;
+    VectorAssembler a(w);
+
+    START_STEPPING(a);
+    a.push_reg64(RBP);
+    a.mov_reg_reg64(RBP, RSP);
+
+    a.add_rm64_imm8(reg_1op(RSP), 4);
+    a.sub_rm64_imm8(reg_1op(RSP), 4);
+
+    STOP_STEPPING(a);
+    a.leave();
+    a.ret();
+
+    w.debug_print();
+    w.get_exec_func()();
+
+    std::printf("TEST 13\n* OK\n\n");
+}
+
 int main()
 {
 #ifdef DO_DEBUG_STEPPING
@@ -614,6 +639,7 @@ int main()
     test10();
     test11();
     test12();
+    test13();
 
 #ifdef DO_DEBUG_STEPPING
     // This isn't actually necessary here; it's just to test this function.
