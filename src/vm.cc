@@ -765,7 +765,10 @@ static void check_tag(MainLoopState const &mls, Asm::Assembler<WriterT> &a, Writ
         typename Asm::Assembler<WriterT>::NrDispSetter call_ds = a.call_rel32(0); /*a.call_rm64(reg_1op(RSI));*/ \
         std::size_t af = w.size(); \
         ds.set(af - byte); \
-        call_ds.set((int64_t)mls.overflow_error_handler_asm->get_start_addr() - (int64_t)w.get_start_addr(byte)); \
+        assert(std::llabs(static_cast<int64_t>(mls.overflow_error_handler_asm->get_start_addr() - \
+                          static_cast<int64_t>(w.get_start_addr(byte)))) < (2LL << 31)); \
+        call_ds.set(static_cast<int64_t>(mls.overflow_error_handler_asm->get_start_addr()) - \
+                    static_cast<int64_t>(w.get_start_addr(byte)));  \
         a.mov_rm64_reg(mem_2op(RAX, r1)); \
     }
 EMIT_IBINARITH(emit_iadd, a.add_reg_rm64(mem_2op(RAX, r2)))
