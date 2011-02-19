@@ -621,6 +621,50 @@ void test13()
     std::printf("TEST 13\n* OK\n\n");
 }
 
+//
+// Random test constructed during debugging.
+// (Tests that push_imm8 and push_imm32 do indeed push 8 byted onto the stack.)
+//
+void test14()
+{
+    VectorWriter w;
+    VectorAssembler a(w);
+
+    uint64_t rbp;
+    uint64_t rsp;
+    uint64_t rbx;
+    uint64_t rcx;
+
+    START_STEPPING(a);
+    a.push_reg64(RBP);
+    a.mov_reg_reg64(RBP, RSP);
+
+    a.push_imm8(5);
+    a.push_imm32(6);
+    a.pop_reg64(RBX);
+    a.pop_reg64(RCX);
+
+    a.mov_reg_reg64(RAX, RBP);
+    a.mov_moffs64_rax(PTR(&rbp));
+    a.mov_reg_reg64(RAX, RSP);
+    a.mov_moffs64_rax(PTR(&rsp));
+    a.mov_reg_reg64(RAX, RBX);
+    a.mov_moffs64_rax(PTR(&rbx));
+    a.mov_reg_reg64(RAX, RCX);
+    a.mov_moffs64_rax(PTR(&rcx));
+
+    STOP_STEPPING(a);
+    a.leave();
+    a.ret();
+
+    w.debug_print();
+    w.get_exec_func()();
+
+    std::printf("TEST 14: RBP=0x%llx, RSP=0x%llx, RBX=%lli, RCX=%lli\n", rbp, rsp, rbx, rcx);
+    assert(rbp == rsp && rbx == 6 && rcx == 5);
+    std::printf("* OK\n\n");
+}
+
 int main()
 {
 #ifdef DO_DEBUG_STEPPING
@@ -640,6 +684,7 @@ int main()
     test11();
     test12();
     test13();
+    test14();
 
 #ifdef DO_DEBUG_STEPPING
     // This isn't actually necessary here; it's just to test this function.
