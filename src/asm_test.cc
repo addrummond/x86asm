@@ -623,7 +623,7 @@ void test13()
 
 //
 // Random test constructed during debugging.
-// (Tests that push_imm8 and push_imm32 do indeed push 8 byted onto the stack.)
+// (Tests that push_imm8 and push_imm32 do indeed push 8 bytes onto the stack.)
 //
 void test14()
 {
