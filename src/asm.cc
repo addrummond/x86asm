@@ -24,7 +24,9 @@ static const uint8_t register_codes[] = {
     0,1,2,3,4,5,6,7, // R8-R15
     0,1,2,3,4,5,6,7, // MM0-MM7
     0,1,2,3,4,5,6,7, // XMM0-XMM7
-    0,1,2,3,4,5,6,7  // XMM8-XMM15
+    0,1,2,3,4,5,6,7, // XMM8-XMM15
+    0,1,2,3,4,5,6,7, // AL-BH
+    0,1,2,3,4,5
 };
 static char const *register_names[] = {
     "EAX", "ECX", "EDX", "EBX", "ESP", "EBP", "ESI", "EDI",
@@ -34,7 +36,7 @@ static char const *register_names[] = {
     "XMM0", "XMM1", "XMM2", "XMM3", "XMM4", "XMM5", "XMM6", "XMM7",
     "XMM8", "XMM9", "XMM10", "XMM11", "XMM12", "XMM13", "XMM14", "XMM15",
     "AL", "CL", "DL", "BL", "AH", "CH", "DH", "BH"
-    "FS", "GS",
+    "ES", "CS", "SS", "DS", "FS", "GS",
     "NOT_A_REGISTER"
 };
 }
@@ -223,6 +225,11 @@ bool Asm::ModrmSib::gp_registers_only() const
            (reg == NOT_A_REGISTER || (reg >= EAX && reg <= R15) || (reg >= AL && reg <= BH));
 }
 
+bool Asm::ModrmSib::rm_gp_registers_only() const
+{
+    return (rm_reg == NOT_A_REGISTER || (rm_reg >= EAX && rm_reg <= R15) || (rm_reg >= AL && rm_reg <= BH));
+}
+
 static bool mm_registers_only_(ModrmSib const &modrm, Register mm_start, Register mm_end)
 {
     // A bit complicated, because the RM field might (obligatorily) contain a GP register
@@ -249,6 +256,11 @@ bool Asm::ModrmSib::mm_registers_only() const
 bool Asm::ModrmSib::xmm_registers_only() const
 {
     return mm_registers_only_(*this, XMM0, XMM15);
+}
+
+bool Asm::ModrmSib::has_segment_reg_operand() const
+{
+    return reg >= ES && reg <= GS;
 }
 
 bool Asm::ModrmSib::all_register_operands_have_size(Size size) const
@@ -1019,8 +1031,8 @@ void Asm::Assembler<WriterT>::leave() {
 template <class WriterT, uint8_t OPCODE, Size RM_SIZE>
 static void mov_rm_reg_(Assembler<WriterT> &a, WriterT &w, ModrmSib const &modrmsib)
 {
-    assert(modrmsib.gp_registers_only() /*&&
-                                          modrmsib.all_register_operands_have_size(RM_SIZE)*/);
+    assert(modrmsib.gp_registers_only() ||
+           (modrmsib.rm_gp_registers_only() && modrmsib.has_segment_reg_operand() && modrmsib.reg != CS));
     ABIFNZ(compute_rex(modrmsib, RM_SIZE));
     AB(OPCODE);
     write_modrmsib_disp(w, modrmsib);
@@ -1036,6 +1048,8 @@ INST(mov_rm32_reg, 0x89, SIZE_32)
 INST(mov_rm64_reg, 0x89, SIZE_64)
 INST(mov_reg_rm32, 0x8B, SIZE_32)
 INST(mov_reg_rm64, 0x8B, SIZE_64)
+INST(mov_sreg_rm64, 0x8E, SIZE_64)
+INST(mov_rm64_sreg, 0x8C, SIZE_64)
 #undef INST
 
 template <class WriterT>
@@ -1199,6 +1213,27 @@ static void push_imm_(Assembler<WriterT> &a, WriterT &w, ImmT imm)
 INST(push_imm8, uint8_t, SIZE_8, 0x6A)
 INST(push_imm32, uint32_t, SIZE_32, 0x68)
 #undef INST
+
+template <class WriterT>
+void Asm::Assembler<WriterT>::pop_sreg(Register reg)
+{
+    assert(reg == FS || reg == GS);
+    switch (reg) {
+        case FS: AZ("\x0F\xA1"); break;
+        case GS: AZ("\x0F\xA9"); break;
+        default: assert(false);
+    }
+}
+template <class WriterT>
+void Asm::Assembler<WriterT>::push_sreg(Register reg)
+{
+    assert(reg == FS || reg == GS);
+    switch (reg) {
+        case FS: AZ("\x0F\xA0"); break;
+        case GS: AZ("\x0F\xA8"); break;
+        default: assert(false);
+    }
+}
 
 //
 // POPF, PUSHF
