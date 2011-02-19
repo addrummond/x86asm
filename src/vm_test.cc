@@ -201,6 +201,21 @@ void test7()
     std::printf("* OK\n\n");
 }
 
+//
+// Triggers an overflow.
+//
+void test8()
+{
+    char const *code =
+        " INCRW 2"
+        " LDI64 1 922337203685477580"
+        " LDI64 2 922337203685477580"
+        " IMUL 1 2"
+        " EXIT 1";
+
+    test_code(code, 100);
+}
+
 int main()
 {
     test1();
@@ -210,6 +225,7 @@ int main()
     test5();
     test6();
     test7();
+    test8(); // NOT RUN BY DEFAULY AS IT TRIGGERS AN OVERFLOW.
 
     return 0;
 }

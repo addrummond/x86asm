@@ -24,7 +24,7 @@ enum Register {
     // 16-bit registers.
     AL, CL, DL, BL, AH, CH, DH, BH,
 
-    FS,GS, // Other segment registers are ignored in 64-bit mode.
+    ES, CS, SS, DS, FS, GS,
 
     NOT_A_REGISTER
 };
@@ -92,11 +92,15 @@ struct ModrmSib {
     bool gp8_registers_only() const;
     // Return true if all register operands are GP registers.
     bool gp_registers_only() const;
+    // Return true if all rm operands are gp registers if registers at all.
+    bool rm_gp_registers_only() const;
     // Return true if all register operands are MM registers.
     bool mm_registers_only() const;
     // Return true iff all register operands are XMM registers.
     bool xmm_registers_only() const;
-    // Returns true if there is no additional reg operand.
+    // Return true if reg operand is a segment register.
+    bool has_segment_reg_operand() const;
+    // Returns true if there is an additional reg operand.
     bool has_reg_operand() const;
     // Checks that all register operands in a ModRM byte have a given (byte) size.
     bool all_register_operands_have_size(Size size) const;
@@ -491,6 +495,8 @@ public:
     void mov_reg_reg8(Register dest, Register src) { mov_reg_rm8(reg_2op(dest, src)); }
     void mov_reg_reg32(Register dest, Register src) { mov_reg_rm32(reg_2op(dest, src)); }
     void mov_reg_reg64(Register dest, Register src) { mov_reg_rm64(reg_2op(dest, src)); }
+    void mov_sreg_rm64(ModrmSib const &modrmsib);
+    void mov_rm64_sreg(ModrmSib const &modrmsib);
 
     // SSE(2) MOV* intructions.
     void movdqa_mm_mmm128(ModrmSib const &modrmsib);
@@ -524,6 +530,9 @@ public:
     // POP
     void pop_rm64(ModrmSib const &modrmsib);
     void pop_reg64(Register reg);
+    void pop_sreg(Register reg);
+    void pop_fs() { pop_sreg(FS); }
+    void pop_gs() { pop_sreg(GS); }
 
     // POPF
     void popf();
@@ -534,6 +543,9 @@ public:
     void push_reg64(Register reg);
     void push_imm8(uint8_t imm);
     void push_imm32(uint32_t imm);
+    void push_sreg(Register reg);
+    void push_fs() { push_sreg(FS); }
+    void push_gs() { push_sreg(GS); }
 
     // PUSHF
     void pushf();

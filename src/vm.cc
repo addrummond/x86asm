@@ -12,6 +12,9 @@
 #include <fstream>
 #endif
 #include <algorithm>
+namespace Gmp {
+#include <gmp.h>
+}
 
 //
 // Register scheme.
@@ -122,7 +125,8 @@ const unsigned Vm::TAG_INT = 0;
 const unsigned Vm::TAG_BOOL = 1;
 const unsigned Vm::TAG_DOUBLE = 2;
 const unsigned Vm::TAG_VECTOR = 3;
-const unsigned Vm::TAG_NULL = 4;
+const unsigned Vm::TAG_BIGINT = 4;
+const unsigned Vm::TAG_NULL = 5;
 
 const unsigned Vm::TAG_MASK = 7; // Lowest three bits.
 
@@ -352,6 +356,7 @@ struct MainLoopState {
     Vm::VectorAssemblerBroker &ab;
     std::vector<uint8_t> &instructions;
     std::size_t start;
+    std::vector<uint8_t>::const_iterator i;
     std::vector<uint8_t>::const_iterator position_of_last_incrw;
     std::size_t BLOB_SIZE;
     SavedRegisters saved_registers;
@@ -364,7 +369,9 @@ struct MainLoopState {
     Mem::MemState mem_state;
 
     ErrorHandler type_error_handler;
+    ErrorHandler overflow_error_handler;
     boost::shared_ptr<Asm::VectorWriter> type_error_handler_asm;
+    boost::shared_ptr<Asm::VectorWriter> overflow_error_handler_asm;
 
 #ifdef DEBUG
     struct Asm::CountingVectorWriter *last_writer;
@@ -552,6 +559,30 @@ static void move_vmreg_ptr_to_guaranteed_x86reg(Asm::Assembler<WriterT> &a, Asm:
     }
 }
 
+int64_t get_int_vmreg_value(RegId reg)
+{
+    using namespace Asm;
+    int64_t r;
+    VectorWriter w;
+    Assembler<VectorWriter> a(w);
+    a.push_reg64(RBP);
+    a.mov_reg_reg64(RBP, RSP);
+    a.push_reg64(RAX);
+    a.mov_reg_imm64(RAX, PTR(&r));
+    if (vm_reg_is_in_x86reg) {
+        a.mov_rm64_reg(mem_2op(RegId_to_x86reg(reg), RAX));
+    }
+    else {
+        a.mov_reg_rm64(mem_2op(RAX, RSP, NOT_A_REGISTER, SCALE_1, RegId_to_disp(reg) + 8/*because we pushed RAX*/));
+        a.mov_moffs64_rax(PTR(&r));
+    }
+    a.pop_reg64(RAX);
+    a.leave();
+    a.ret();
+    w.get_exec_func()();
+    return r;
+}
+
 static void *my_malloc(size_t bytes)
 {
     void *r = std::malloc(bytes);
@@ -666,6 +697,37 @@ static boost::shared_ptr<WriterT> gen_type_error_handler_asm(MainLoopState const
     return w;
 }
 
+static void overflow_error_handler(MainLoopState &mls)
+{
+    using namespace Asm;
+
+    std::printf("\n\n*** OVERFLOW ERROR ***\n\n");
+    std::exit(1);
+}
+template <class WriterT>
+static boost::shared_ptr<WriterT> gen_overflow_error_handler_asm(MainLoopState const &mls)
+{
+    using namespace Asm;
+    boost::shared_ptr<WriterT> w(new WriterT);
+    Asm::Assembler<WriterT> a(*w);
+
+    a.push_reg64(RBP);
+    a.mov_reg_reg64(RBP, RSP);
+
+    save_regs_before_c_funcall(mls, a);
+    a.mov_reg_imm64(RDI, PTR(&mls));
+    a.mov_reg_imm64(RBX, PTR(mls.overflow_error_handler));
+    a.mov_reg_imm32(EAX, 0);
+    a.call_rm64(reg_1op(RBX));
+    // Won't actually get here.
+    restore_regs_after_c_funcall(mls, a);
+
+    a.leave();
+    a.ret();
+
+    return w;
+}
+
 template <class WriterT>
 static void check_tag(MainLoopState const &mls, Asm::Assembler<WriterT> &a, WriterT &w, Asm::Register x86reg, unsigned expected_tag_value, Asm::Register scratch_reg)
 {
@@ -697,7 +759,13 @@ static void check_tag(MainLoopState const &mls, Asm::Assembler<WriterT> &a, Writ
         check_tag(mls, a, w, r2, TAG_INT, SCRATCH_REG(RSI)); \
     \
         a.mov_reg_rm64(mem_2op(RAX, r1)); \
-        code; \
+        do { code; } while (0); /*leaves result in RAX*/ \
+        typename Asm::Assembler<WriterT>::StDispSetter ds = a.jnc_st_rel8(0); /*Going to fill this in in a minute*/ \
+        std::size_t byte = w.size(); \
+        typename Asm::Assembler<WriterT>::NrDispSetter call_ds = a.call_rel32(0); /*a.call_rm64(reg_1op(RSI));*/ \
+        std::size_t af = w.size(); \
+        ds.set(af - byte); \
+        call_ds.set((int64_t)mls.overflow_error_handler_asm->get_start_addr() - (int64_t)w.get_start_addr(byte)); \
         a.mov_rm64_reg(mem_2op(RAX, r1)); \
     }
 EMIT_IBINARITH(emit_iadd, a.add_reg_rm64(mem_2op(RAX, r2)))
@@ -1135,10 +1203,10 @@ static uint64_t inner_main_loop(MainLoopState &mls)
 #endif
 
     mls.last_instruction_exited = false;
-    std::vector<uint8_t>::const_iterator i;
-    for (i = mls.instructions.begin() + mls.start;
-         i != mls.instructions.end() && i - mls.instructions.begin() - mls.start < mls.BLOB_SIZE*4;
-         i += 4) {
+    for (mls.i = mls.instructions.begin() + mls.start;
+         mls.i != mls.instructions.end() && mls.i - mls.instructions.begin() - mls.start < mls.BLOB_SIZE*4;
+         mls.i += 4) {
+        std::vector<uint8_t>::const_iterator &i = mls.i;
         assert(i + 3 < mls.instructions.end());
 
         mls.last_instruction_exited = false;
@@ -1216,7 +1284,7 @@ static uint64_t inner_main_loop(MainLoopState &mls)
     }
 
     if (! mls.last_instruction_exited)
-        call_main_loop_setting_start_to(mls, *a, *w, i - mls.instructions.begin());
+        call_main_loop_setting_start_to(mls, *a, *w, mls.i - mls.instructions.begin());
 
 #ifdef DEBUG
     if (mls.last_writer != w)
@@ -1254,8 +1322,10 @@ uint64_t Vm::main_loop(std::vector<uint8_t> &instructions, std::size_t start, co
 #endif
 
     mls.type_error_handler = type_error_handler;
+    mls.overflow_error_handler = overflow_error_handler;
 
     mls.type_error_handler_asm = gen_type_error_handler_asm<Asm::VectorWriter>(mls);
+    mls.overflow_error_handler_asm = gen_overflow_error_handler_asm<Asm::VectorWriter>(mls);
 
     GET_BASE_POINTER_AND_STACK_POINTER(mls.initial_base_pointer_for_main_loop,
                                        mls.initial_stack_pointer_for_main_loop);

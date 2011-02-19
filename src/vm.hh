@@ -63,10 +63,12 @@ extern const uint32_t FLAG_DESTINATION; // Hint that jumps go here.
 typedef uint8_t RegId;
 extern const unsigned MAX_REG_ID;
 
+// Tags go in the least significant three bits of a pointer.
 extern const unsigned TAG_INT;
 extern const unsigned TAG_BOOl;
 extern const unsigned TAG_DOUBLE;
 extern const unsigned TAG_VECTOR;
+extern const unsigned TAG_BIGINT;
 extern const unsigned TAG_NULL;
 
 extern const unsigned TAG_MASK;
