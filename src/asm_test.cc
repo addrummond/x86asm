@@ -31,7 +31,7 @@ void test1()
 
     // Assembly commented line-by-line in this test only as an example.
 
-    // This test also includes some machinary unnecessary for a 0-argument
+    // This test also includes some machinery unnecessary for a 0-argument
     // void function (saving the base pointer and then restoring it via LEAVE).
 
     START_STEPPING(a);
